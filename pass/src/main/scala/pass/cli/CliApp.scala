@@ -6,6 +6,7 @@ import cats.effect.*
 import cats.effect.IOApp.Simple
 import scopt.OParser
 import cats.effect.IOApp
+import fs2.io.file.Files
 
 opaque type Name <: String = String
 
@@ -33,16 +34,15 @@ val p = OParser.sequence(
   create
 )
 
-
-
-
-
-
 object CliApp extends IOApp:
 
   override def run(args: List[String]): IO[ExitCode] =
+    given Files[IO] = Files.forAsync[IO]
+    given LocalStorage[IO] = LocalStorage.make[IO](java.nio.file.Paths.get(".").toString)
+    val cmd = Command.make[IO]()
+
     val r = OParser.parse(p, args, Action.Empty) match
-      case Some(Action.CreatePassword(name)) => IO.println(s"create [${name}]")
+      case Some(Action.CreatePassword(name)) => cmd.create(name)
       case Some(Action.Empty)                => IO.println(s"empty")
       case None                              => IO.println("None")
 

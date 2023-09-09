@@ -11,7 +11,7 @@ object Settings {
 
   lazy val common = Seq(
     version        := Versions.scala,
-    scalacOptions ++= Seq("-rewrite", "-indent")
+    scalacOptions ++= Seq("-rewrite", "-indent", "-deprecation")
   )
 }
 

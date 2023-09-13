@@ -19,39 +19,42 @@ object Name:
 enum Action:
   case InitWithPath(repoDir: Path)
   case InitFromRepository(url: URL)
-  case CreateSecret(name: Name, repoDir: Path)
+  case CreateSecret(name: Option[Name], secret: Option[Secret])
   case Empty
 
 val builder = OParser.builder[Action]
 
 import builder.*
 
-val repoDirDefault = Paths.get(".", "/.tmps").toAbsolutePath
+val repoDirDefault = Paths.get("", ".tmps").toAbsolutePath
 
 val create = cmd("create")
   .text("create new secret.")
   .children(
     arg[Name]("name")
       .required()
-      .action((name, c) => Action.CreateSecret(name, repoDirDefault)),
-    arg[Path]("repo")
-      .optional()
       .action {
-        case (repoDir, Action.CreateSecret(name, _)) => Action.CreateSecret(name, repoDir)
-        case (repoDir, action)                       => Action.Empty
+        case (name, a: Action.CreateSecret) => a.copy(name = name.some)
+        case (name, _)                      => Action.CreateSecret(name.some, none)
       },
-    checkConfig(c => success)
-    // if (c. && c.xyz) failure("xyz cannot keep alive")
+    arg[String]("secret")
+      .required()
+      .action {
+        case (s, a: Action.CreateSecret) => a.copy(secret = Secret.fromString(s).some)
+        case (s, _) => Action.CreateSecret(name = none, secret = Secret.fromString(s).some)
+      },
+    checkConfig {
+      case a: Action.CreateSecret if a.name.nonEmpty && a.secret.nonEmpty => success
+      case a: Action.CreateSecret                                         => failure(s"fail $a")
+      case other                                                          => success
+    }
   )
 
 val init = cmd("init")
   .text("init repository")
   .children(
     opt[Path]("path")
-      .withFallback(() => {
-
-        repoDirDefault
-      })
+      .withFallback(() => repoDirDefault)
       .action((path, c) => Action.InitWithPath(path)),
     checkConfig(c => success)
   )
@@ -59,8 +62,8 @@ val init = cmd("init")
 val p = OParser.sequence(
   programName("pass"),
   head("pass", "0.0.1"),
-  create,
-  init
+  init,
+  create
 )
 
 object CliApp extends IOApp:
@@ -68,18 +71,17 @@ object CliApp extends IOApp:
   override def run(args: List[String]): IO[ExitCode] =
     given fs2.io.file.Files[IO] = fs2.io.file.Files.forAsync[IO]
 
-    given LocalStorage[IO] = LocalStorage.make[IO](repoDirDefault.toString)
+    val ls = LocalStorage.make[IO](repoDirDefault.toString)
 
-    val cmd = Command.make[IO]
+    val cmd = Command.make[IO](ls)
 
     def handle[T](fa: IO[RejectionOr[T]]): IO[Unit] =
-      EitherT(fa).foldF(e => IO.println(s"Error: ${e}"), r => IO.println(r))
+      EitherT(fa).foldF(e => IO.println(s"Error: $e"), r => IO.println(r))
 
     val r = OParser.parse(p, args, Action.Empty) match
-      case Some(Action.InitWithPath(path)) => handle(cmd.initWithPath(path))
-      case Some(Action.CreateSecret(name, path)) =>
-        handle(cmd.create(name))
-      case Some(Action.Empty) => IO.println(s"empty")
-      case None               => IO.println("None")
+      case Some(Action.InitWithPath(path))                     => handle(cmd.initWithPath(path))
+      case Some(Action.CreateSecret(Some(name), Some(secret))) => handle(cmd.create(name, secret))
+      case Some(Action.Empty)                                  => IO.println(s"empty")
+      case other                                               => IO.println(other.toString)
 
     r *> ExitCode.Success.pure[IO]

@@ -2,7 +2,7 @@ import sbt.Keys.*
 import sbt.*
 
 object Versions {
-  val scala      = "3.3.0"
+  val scala      = "3.3.1"
   val cats       = "2.10.0"
   val catsEffect = "3.5.1"
 }
@@ -22,4 +22,5 @@ object Deps {
   lazy val jgit       = Seq("org.eclipse.jgit" % "org.eclipse.jgit" % "6.6.1.202309021850-r")
   lazy val fs2        = Seq("co.fs2" %% "fs2-core" % "3.9.0", "co.fs2" %% "fs2-io" % "3.9.0")
   lazy val scopt      = Seq("com.github.scopt" %% "scopt" % "4.1.0")
+  lazy val glass      = Seq("tf.tofu" %% "glass-core" % "0.2.2")
 }

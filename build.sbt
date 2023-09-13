@@ -13,7 +13,7 @@ lazy val pass = project
   .dependsOn(core)
   .settings(Settings.common)
   .settings(
-    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.scopt ++ Deps.jgit
+    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.scopt ++ Deps.jgit ++ Deps.glass
   )
 
 lazy val root = project

@@ -174,7 +174,7 @@ enum SecretFilter:
 trait Command[F[_]]:
   def initWithPath(repoDir: Path): F[RejectionOr[StorageView]]
   def create(name: Name, secret: SecretPayload): F[RejectionOr[SecretView]]
-  def filter(filter: SecretFilter): F[RejectionOr[Node[SecretView]]]
+  def filter(filter: SecretFilter): F[RejectionOr[Tree[SecretView]]]
 
 object Command:
   def make[F[_]: Async](ls: LocalStorage[F]): Command[F] = Impl[F](ls)
@@ -184,7 +184,7 @@ object Command:
     override def initWithPath(repoDir: Path): F[RejectionOr[StorageView]] =
       GitRepo.create(repoDir).use(r => r.info.map(StorageView(_).asRight))
 
-    override def filter(filter: SecretFilter): F[RejectionOr[Node[SecretView]]] =
+    override def filter(filter: SecretFilter): F[RejectionOr[Tree[SecretView]]] =
       def loadSecret(path: Path): EitherT[F, Err, Secret[Option[Metadata]]] =
         for
           meta <- ls.loadMeta(Name.of(path.toString)).liftTo[Err]

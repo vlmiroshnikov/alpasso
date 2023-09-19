@@ -2,6 +2,7 @@ package pass.cli
 
 import cats.*
 import cats.data.*
+import cats.data.NonEmptyChain
 import cats.syntax.all.*
 import cats.effect.*
 import cats.effect.IOApp.Simple
@@ -19,7 +20,8 @@ object Name:
 enum Action:
   case InitWithPath(repoDir: Path)
   case InitFromRepository(url: URL)
-  case CreateSecret(name: Option[Name], secret: Option[Secret])
+  case CreateSecret(name: Option[Name], secret: Option[SecretPayload])
+  case ListSecrets(filter: SecretFilter)
   case Empty
 
 val builder = OParser.builder[Action]
@@ -40,8 +42,8 @@ val create = cmd("create")
     arg[String]("secret")
       .required()
       .action {
-        case (s, a: Action.CreateSecret) => a.copy(secret = Secret.fromString(s).some)
-        case (s, _) => Action.CreateSecret(name = none, secret = Secret.fromString(s).some)
+        case (s, a: Action.CreateSecret) => a.copy(secret = SecretPayload.fromString(s).some)
+        case (s, _) => Action.CreateSecret(name = none, secret = SecretPayload.fromString(s).some)
       },
     checkConfig {
       case a: Action.CreateSecret if a.name.nonEmpty && a.secret.nonEmpty => success
@@ -59,11 +61,21 @@ val init = cmd("init")
     checkConfig(c => success)
   )
 
+val list = cmd("list")
+  .text("list")
+  .abbr("ls")
+  .children(
+    arg[String]("string")
+     .action((str, c) => Action.ListSecrets(SecretFilter.Empty)),
+  )
+
+
 val p = OParser.sequence(
   programName("pass"),
   head("pass", "0.0.1"),
   init,
-  create
+  create,
+  list
 )
 
 object CliApp extends IOApp:
@@ -81,6 +93,7 @@ object CliApp extends IOApp:
     val r = OParser.parse(p, args, Action.Empty) match
       case Some(Action.InitWithPath(path))                     => handle(cmd.initWithPath(path))
       case Some(Action.CreateSecret(Some(name), Some(secret))) => handle(cmd.create(name, secret))
+      case Some(Action.ListSecrets(filter))                    => handle(cmd.filter(filter))
       case Some(Action.Empty)                                  => IO.println(s"empty")
       case other                                               => IO.println(other.toString)
 

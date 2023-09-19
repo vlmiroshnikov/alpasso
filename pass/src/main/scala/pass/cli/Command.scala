@@ -6,14 +6,17 @@ import cats.syntax.all.*
 import cats.effect.*
 
 import java.nio.ByteBuffer
-import java.nio.file.{ Files, Path, StandardOpenOption }
+import java.nio.file.{Files, Path, StandardOpenOption}
 import glass.*
 
 import java.nio.charset.Charset
+import io.circe.*
+import io.circe.syntax.*
 
 enum Err:
   case AlreadyExists(name: Name)
   case StorageNotInitialized(path: Path)
+  case InconsistentStorage
   case InternalErr
 
 object Err:
@@ -24,6 +27,7 @@ object Err:
   def fromGitError(ge: GitError): Err =
     ge match
       case GitError.RepositoryNotFound(path) => Err.StorageNotInitialized(path)
+      case GitError.RepositoryIsDirty        => Err.InconsistentStorage
       case GitError.UnexpectedError          => Err.InternalErr
 
   @FunctionalInterface
@@ -40,10 +44,29 @@ case class Tag(name: String, value: String)
 
 enum Metadata:
   case HostName(name: String)
-  case UserName(name: String)
   case UserData(tags: List[Tag])
 
-case class RawStoreEntry(payload: Path, meta: Path)
+
+object Metadata:
+  given Encoder[Metadata] = Encoder.instance[Metadata]:
+    case Metadata.HostName(name) => Json.obj("host-name" -> name.asJson)
+    case Metadata.UserData(tags) => Json.obj(tags.map(t => t.name -> t.value.asJson) : _*)
+
+  given Decoder[Metadata] = Decoder.decodeJsonObject.emap { obj =>
+    obj.toList
+      .traverse((k, v) => (k.asRight, v.as[String]).mapN(Tag))
+      .map(Metadata.UserData)
+      .leftMap(_.getMessage)
+  }
+
+
+case class RawStoreEntry(secret: Path, meta: Path)
+
+case class Secret[+T](name: Name, payload: T)
+object Secret:
+  given Functor[Secret] = new Functor[Secret]:
+    override def map[A, B](fa: Secret[A])(f: A => B): Secret[B] =
+      Secret(fa.name, f(fa.payload))
 
 trait StorageCtx:
   def repoDir: Path
@@ -57,7 +80,9 @@ object Payload:
 
 trait LocalStorage[F[_]]:
   def repoDir(): F[Either[StorageErr, Path]]
-  def createFiles(name: Name, payload: Payload): F[Either[StorageErr, RawStoreEntry]]
+  def createFiles(name: Name, payload: Payload): F[Either[StorageErr, Secret[RawStoreEntry]]]
+  def loadMeta(name: Name): F[Either[StorageErr, Secret[Option[Metadata]]]]
+
 
 object LocalStorage:
   import fs2.io.file.Files as F2Files
@@ -79,7 +104,19 @@ object LocalStorage:
 
     override def repoDir(): F[Either[StorageErr, Path]] = ctx.repoDir.asRight.pure
 
-    override def createFiles(name: Name, payload: Payload): F[Either[StorageErr, RawStoreEntry]] =
+    override def loadMeta(name: Name): F[Either[StorageErr, Secret[Option[Metadata]]]] =
+      val metaPath = ctx.resolve(name).resolve("meta")
+
+      blocking(Files.exists(metaPath)).flatMap { exists =>
+        if !exists then Secret(name, None).asRight.pure
+        else
+          for
+            raw  <- blocking(Files.readString(metaPath))
+            meta <- blocking(parser.parse(raw).flatMap(_.as[Metadata]).getOrElse(Metadata.UserData(Nil)))
+          yield Secret(name, meta.some).asRight
+      }
+
+    override def createFiles(name: Name, payload: Payload): F[Either[StorageErr, Secret[RawStoreEntry]]] =
       val path = ctx.resolve(name)
 
       blocking(Files.exists(path)).flatMap { exists =>
@@ -99,27 +136,29 @@ object LocalStorage:
                                      "",
                                      StandardOpenOption.CREATE_NEW,
                                      StandardOpenOption.WRITE))
-          yield RawStoreEntry(payloadPath, metaPath).asRight
+          yield Secret(name, RawStoreEntry(payloadPath, metaPath)).asRight
       }
 
-case class SecretView(name: Name)
+
+
+case class SecretView(name: Name, metadata: Metadata)
 case class ErrorView(code: String, explain: Option[String])
 
 case class StorageView(repoDir: Path)
 
-opaque type Secret = Array[Byte]
+opaque type SecretPayload = Array[Byte]
 
-object Secret:
+object SecretPayload:
   private val utf8Charset                = Charset.forName("UTF-8")
-  def fromRaw(data: Array[Byte]): Secret = data
-  def fromString(data: String): Secret   = data.getBytes(utf8Charset)
+  def fromRaw(data: Array[Byte]): SecretPayload = data
+  def fromString(data: String): SecretPayload   = data.getBytes(utf8Charset)
 
-  extension (s: Secret) def rawData: Array[Byte] = s
+  extension (s: SecretPayload) def rawData: Array[Byte] = s
 
 type RejectionOr[A] = Either[Err, A]
 
 trait CryptoApi[F[_]]:
-  def encript(data: ByteBuffer): F[ByteBuffer]
+  def encrypt(data: ByteBuffer): F[ByteBuffer]
 
 extension [F[_]: Functor, A, B](fa: F[Either[A, B]])
   def toEitherT: EitherT[F, A, B] = EitherT(fa)
@@ -129,9 +168,13 @@ extension [F[_]: Functor, A, B](fa: F[Either[A, B]])
       up: Upcast[E, A]): EitherT[F, E, B] =
     EitherT(fa).leftMap(a => up.upcast(a))
 
+enum SecretFilter:
+  case Empty
+
 trait Command[F[_]]:
   def initWithPath(repoDir: Path): F[RejectionOr[StorageView]]
-  def create(name: Name, secret: Secret): F[RejectionOr[SecretView]]
+  def create(name: Name, secret: SecretPayload): F[RejectionOr[SecretView]]
+  def filter(filter: SecretFilter): F[RejectionOr[Node[SecretView]]]
 
 object Command:
   def make[F[_]: Async](ls: LocalStorage[F]): Command[F] = Impl[F](ls)
@@ -141,25 +184,39 @@ object Command:
     override def initWithPath(repoDir: Path): F[RejectionOr[StorageView]] =
       GitRepo.create(repoDir).use(r => r.info.map(StorageView(_).asRight))
 
-    override def create(name: Name, secret: Secret): F[RejectionOr[SecretView]] =
+    override def filter(filter: SecretFilter): F[RejectionOr[Node[SecretView]]] =
+      def loadSecret(path: Path): EitherT[F, Err, Secret[Option[Metadata]]] =
+        for
+          meta <- ls.loadMeta(Name.of(path.toString)).liftTo[Err]
+        yield meta
+
+
+      val buildTree = for
+        root <- ls.repoDir().liftTo[Err]
+        tree <- EitherT.liftF(Sync[F].blocking(walkFileTree(root, exceptDir = _.endsWith(".git"))))
+        treeView <- tree.traverse(loadSecret)
+      yield treeView
+            .traverseFilter(s => Id(s.payload.map(m => SecretView(s.name, m))))
+            //.traverse(s => Id(SecretView(s.name, s.payload.getOrElse(Metadata.UserData(Nil)))))
+
+      buildTree.value
+
+    override def create(name: Name, secret: SecretPayload): F[RejectionOr[SecretView]] =
       def addNewSecret(git: GitRepo[F]) = // todo use saga
         for
+          _    <- git.verify().liftTo[Err]
           file <- ls.createFiles(name, Payload.from(secret.rawData)).liftTo[Err]
           _ <- git
-                 .addFiles(NonEmptyList.of(file.payload, file.meta),
-                           s"Create secret $name at ${sys.env.getOrElse("HOST_NAME", "")}")
+                 .addFiles(NonEmptyList.of(file.payload.secret, file.payload.meta),
+                           s"Create secret $name at ${sys.env.getOrElse("HOST", "")}")
                  .liftTo[Err]
-        yield SecretView(Name.of(file.payload.getFileName.toString))
+        yield SecretView(file.name, Metadata.UserData(Nil))
 
-      val result = for
-        home <- ls.repoDir().liftTo[Err]
-        r <- GitRepo
-               .openExists(home)
-               .use:
-                 case Right(git) => addNewSecret(git).value
-                 case Left(ge)   => Err.fromGitError(ge).asLeft.pure
-               .liftTo[Err]
-      yield r
+      val result =
+        for
+          home <- ls.repoDir().liftTo[Err]
+          r    <- GitRepo.openExists(home).use(addNewSecret(_).value).liftTo[Err]
+        yield r
 
       result.value
 

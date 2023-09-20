@@ -66,9 +66,8 @@ val list = cmd("list")
   .abbr("ls")
   .children(
     arg[String]("string")
-     .action((str, c) => Action.ListSecrets(SecretFilter.Empty)),
+      .action((str, c) => Action.ListSecrets(SecretFilter.Empty))
   )
-
 
 val p = OParser.sequence(
   programName("pass"),
@@ -87,8 +86,8 @@ object CliApp extends IOApp:
 
     val cmd = Command.make[IO](ls)
 
-    def handle[T](fa: IO[RejectionOr[T]]): IO[Unit] =
-      EitherT(fa).foldF(e => IO.println(s"Error: $e"), r => IO.println(r))
+    def handle[T: Show](fa: IO[RejectionOr[T]]): IO[Unit] =
+      EitherT(fa).foldF(e => IO.println(s"Error: $e"), r => IO.println(s"Result: \n${r.show}"))
 
     val r = OParser.parse(p, args, Action.Empty) match
       case Some(Action.InitWithPath(path))                     => handle(cmd.initWithPath(path))

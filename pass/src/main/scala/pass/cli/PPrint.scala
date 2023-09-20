@@ -6,17 +6,21 @@ import scala.collection.*
 import java.io.*
 import cats.data.*
 import cats.*
-import cats.syntax.show.given
+import cats.syntax.all.*
+
 enum Tree[+T]:
   case Node[A](data: A, siblings: Chain[Tree[A]] = Chain.nil) extends Tree[A]
   case Empty extends Tree[Nothing]
 
-
 object Tree:
-  extension[A] (t: Tree[A])
+
+  extension [A](t: Tree[A])
+
     def leafs: Chain[Tree[A]] = t match
       case Tree.Node(data, sub) => sub
-      case Tree.Empty => Chain.empty
+      case Tree.Empty           => Chain.empty
+
+  given [A: Show]: Show[Tree[A]] = Show.show(tre => printRoot(tre))
 
   /*
   instance Applicative MyTree where
@@ -25,16 +29,17 @@ object Tree:
         MyNode (f x) ( (map (fmap f) treeElementList) ++ (map (<*> (MyNode x treeElementList)) treeFunctionList) )
 
    */
-  given Applicative[Tree] = new Applicative[Tree]:
-    override def pure[A](x: A): Tree[A] = Node(x)
-    override def ap[A, B](ff: Tree[A => B])(fa: Tree[A]): Tree[B] =
-      (ff, fa) match
-        case (Node(f, funList), Node(x, elemList)) =>
-          Node(f(x),  elemList.map(enode => this.map(enode)(f)) ++ funList.map( fe => ap(fe)(Node(x,elemList))))
-        case (Node(f, funList), Node(x, elemList)) =>  ???
+//  given Applicative[Tree] = new Applicative[Tree]:
+//    override def pure[A](x: A): Tree[A] = Node(x)
+//
+//    override def ap[A, B](ff: Tree[A => B])(fa: Tree[A]): Tree[B] =
+//      (ff, fa) match
+//        case (Node(f, funList), Node(x, elemList)) =>
+//          Node(f(x), elemList.map(enode => this.map(enode)(f)) ++ funList.map(fe => ap(fe)(Node(x, elemList))))
+//        case (Node(f, funList), Node(x, elemList)) => ???
 
   given TraverseFilter[Tree] = new TraverseFilter[Tree]:
-    private val F = summon[Traverse[Tree]]
+    private val F                         = summon[Traverse[Tree]]
     override def traverse: Traverse[Tree] = F
 
     /*
@@ -51,70 +56,80 @@ object Tree:
       if (fa.isEmpty) G.pure(Iterable.empty)
       else G.map(Chain.traverseFilterViaChain(toImIndexedSeq(fa))(f))(_.toVector)
      */
-    override def traverseFilter[G[_], A, B](tree: Tree[A])(f: A => G[Option[B]])(implicit G: Applicative[G]): G[Tree[B]] =
+    override def traverseFilter[G[_], A, B](
+        tree: Tree[A]
+      )(f: A => G[Option[B]]
+      )(implicit
+        G: Applicative[G]): G[Tree[B]] =
       tree match
-        case Tree.Empty  => G.pure(Tree.Empty)
+        case Tree.Empty                => G.pure(Tree.Empty)
         case Tree.Node(data, siblings) =>
-//          val data = node.data
-//          val siblings = node.siblings
-
-          val dataG: G[Option[B]] =  f(data)
-          val sibG  = Traverse[Chain].traverse(siblings)(v => traverseFilter(v)(f))
-
-          G.map2(dataG, sibG) {
+          val sibG = Traverse[Chain].traverse(siblings)(v => traverseFilter(v)(f))
+          G.map2(f(data), sibG):
             case (Some(data), sib) => Node(data, sib)
             case (None, _)         => Tree.Empty
-          }
 
   given Traverse[Tree] = new Traverse[Tree]:
 
-    override def traverse[G[_] : Applicative, A, B](fa: Tree[A])(f: A => G[B]): G[Tree[B]] =
+    override def traverse[G[_]: Applicative, A, B](fa: Tree[A])(f: A => G[B]): G[Tree[B]] =
       fa match
         case Tree.Node(data, siblings) =>
           Applicative[G].map2(f(data), Traverse[Chain].traverse(siblings)(v => traverse(v)(f)))(Node.apply)
         case Tree.Empty => Applicative[G].pure(Tree.Empty)
 
-    override def foldLeft[A, B](fa: Tree[A], b: B)(f: (B, A) => B): B = ???
-     // f(fa.siblings.foldLeft(b)((agg, node) => f(agg, node.data)), fa.data)
+    override def foldLeft[A, B](fa: Tree[A], b: B)(f: (B, A) => B): B =
+      fa match
+        case Tree.Node(data, siblings) => f(siblings.foldLeft(b)((agg, node) => f(agg, data)), data)
+        case Tree.Empty => b
 
     override def foldRight[A, B](fa: Tree[A], lb: Eval[B])(f: (A, Eval[B]) => Eval[B]): Eval[B] =
-      ???
-      //f(fa.data, fa.siblings.foldRight(lb)((node, lagg) => f(node.data, lagg)))
+      fa match
+        case Tree.Node(data, siblings) => f(data, siblings.foldRight(lb)((node, lagg) => f(data, lagg)))
+        case Tree.Empty => lb
 
-def printRoot[T: Show](root: Tree[T]): String = ???
-//  val lastPointer   = "└──"
-//  val middlePointer = "├──"
-//
-//  def traverseNodes(
-//      sb: StringBuilder,
-//      padding: String,
-//      pointer: String,
-//      node: Tree[T],
-//      hasRightSibling: Boolean): Unit =
-//    sb.append("\n")
-//    sb.append(padding)
-//    sb.append(pointer)
-//    sb.append(node.data.show)
-//
-//    val paddingBuilder = new StringBuilder(padding)
-//    paddingBuilder.append(if hasRightSibling then "│  " else "   ")
-//
-//    val paddingForBoth = paddingBuilder.toString()
-//    node.siblings.initLast match
-//      case Some((init, last)) =>
-//        init.toList.foreach { sib => traverseNodes(sb, paddingForBoth, middlePointer, sib, true) }
-//        traverseNodes(sb, paddingForBoth, lastPointer, last, false)
-//      case _ => ()
-//
-//  val sb = StringBuilder()
-//  sb.append(root.data)
-//
-//  root.siblings.initLast match
-//    case Some((init, last)) =>
-//      init.toList.foreach { sib => traverseNodes(sb, "", middlePointer, sib, true) }
-//      traverseNodes(sb, "", lastPointer, last, false)
-//    case None => ()
-//  sb.toString()
+
+def printRoot[T: Show](root: Tree[T]): String =
+  val lastPointer   = "└──"
+  val middlePointer = "├──"
+
+  def traverseNodes(
+      sb: StringBuilder,
+      padding: String,
+      pointer: String,
+      tree: Tree[T],
+      hasRightSibling: Boolean): Unit =
+    tree match
+      case Tree.Empty => ()
+      case node: Tree.Node[_] =>
+        sb.append("\n")
+        sb.append(padding)
+        sb.append(pointer)
+        sb.append(node.data.show)
+
+        val paddingBuilder = new StringBuilder(padding)
+        paddingBuilder.append(if hasRightSibling then "│  " else "   ")
+
+        val paddingForBoth = paddingBuilder.toString()
+        node.leafs.initLast match
+          case Some((init, last)) =>
+            init.toList.foreach { sib =>
+              traverseNodes(sb, paddingForBoth, middlePointer, sib, true)
+            }
+            traverseNodes(sb, paddingForBoth, lastPointer, last, false)
+          case _ => ()
+  end traverseNodes
+
+  val sb = StringBuilder()
+  root match
+    case Tree.Empty => sb.toString()
+    case node: Tree.Node[_] =>
+      sb.append(node.data)
+      node.leafs.initLast match
+        case Some((init, last)) =>
+          init.toList.foreach { sib => traverseNodes(sb, "", middlePointer, sib, true) }
+          traverseNodes(sb, "", lastPointer, last, false)
+        case None => ()
+      sb.toString()
 
 def walkFileTree(root: Path, exceptDir: Path => Boolean): Tree[Path] =
   val stub = Tree.Node(Paths.get("."))
@@ -137,9 +152,9 @@ def walkFileTree(root: Path, exceptDir: Path => Boolean): Tree[Path] =
     override def postVisitDirectory(dir: Path, exc: IOException): FileVisitResult =
       val current = stack.pop()
       val updated = stack.pop() match
-        case top: Tree.Node[Path] =>
+        case top: Tree.Node[_] =>
           top.copy(siblings = top.siblings.append(current))
-        case a@Tree.Empty => a
+        case a @ Tree.Empty => a
 
       stack.push(updated)
       FileVisitResult.CONTINUE
@@ -150,6 +165,7 @@ def walkFileTree(root: Path, exceptDir: Path => Boolean): Tree[Path] =
 
 @main
 def main =
-  val tree         = walkFileTree(Paths.get("", ".tmps"), _.endsWith(".git"))
+  val tree         = walkFileTree(Paths.get("", "pass"), _.endsWith(".git"))
+  val exceptTarget = tree.traverseFilter(p => Id(Option.when(!p.endsWith("cli"))(p)))
   given Show[Path] = Show.show(_.getFileName.toString)
-  println(printRoot(tree))
+  println(printRoot(exceptTarget))

@@ -14,18 +14,24 @@ import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 
 import java.io.File
 import java.nio.file.*
+import scala.util.control.NoStackTrace
 
-enum GitError:
+enum GitError extends Throwable with NoStackTrace:
   case RepositoryNotFound(path: Path)
+  case RepositoryIsDirty
   case UnexpectedError
+
+enum GitRepoStatus:
+  case Clean, Dirty
 
 trait GitRepo[F[_]]:
   def info: F[Path]
+  def verify(): F[Either[GitError, Unit]]
   def addFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]]
 
 object GitRepo:
 
-  def openExists[F[_]: Sync](repoDir: Path): Resource[F, Either[GitError, GitRepo[F]]] =
+  def openExists[F[_]: Sync](repoDir: Path): Resource[F, GitRepo[F]] =
     val location = repoDir.resolve(".git")
 
     def adaptErr: Throwable => GitError =
@@ -40,16 +46,16 @@ object GitRepo:
         .findGitDir() // scan up the file system tree
         .setMustExist(true)
         .build()
+
     Resource
       .fromAutoCloseable(repoF)
-      .redeem(adaptErr(_).asLeft, Impl(_).asRight)
+      .map(Impl(_))
 
   def create[F[_]: Sync](repoDir: Path): Resource[F, GitRepo[F]] = Resource
     .fromAutoCloseable(Sync[F].blocking {
       val home       = Files.createDirectory(repoDir)
       val repository = FileRepositoryBuilder.create(home.resolve(".git").toFile)
       repository.create()
-      println(repository.getDirectory)
       repository
     })
     .map(Impl(_))
@@ -63,19 +69,21 @@ object GitRepo:
 
     given Order[Path] = Order.fromComparable[Path]
 
-    override def info: F[Path] = blocking(repository.getDirectory.toPath)
+    override def info: F[Path] = blocking(repository.getWorkTree.toPath)
+
+    override def verify(): F[Either[GitError, Unit]] =
+      blocking:
+        val status = Git.wrap(repository).status().call()
+        Either.cond(status.isClean, (), GitError.RepositoryIsDirty)
 
     override def addFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]] =
       blocking:
-        val git = new Git(repository)
-        val cmd = git.add()
-
-        val parents = files.map(_.getParent).distinct
-        parents
-          .concatNel(files)
-          .traverse(file => Try(cmd.addFilepattern(file.toString)).toEither)
-
-        cmd.call()
+        val git        = new Git(repository)
+        val addCommand = git.add()
+        files
+          .map(file => Repository.stripWorkDir(repository.getWorkTree, file.toFile))
+          .traverse(file => Try(addCommand.addFilepattern(file)).toEither)
+        addCommand.call()
 
         git
           .commit()

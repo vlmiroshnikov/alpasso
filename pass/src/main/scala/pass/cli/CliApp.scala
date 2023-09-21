@@ -28,10 +28,11 @@ object CliApp extends IOApp:
       EitherT(fa).foldF(e => IO.println(s"Error: $e"), r => IO.println(s"Result: \n${r.show}"))
 
     val r = OParser.parse(ArgParser(repoDirDefault).parser, args, Action.Empty) match
-      case Some(Action.InitWithPath(path))                     => handle(cmd.initWithPath(path))
-      case Some(Action.CreateSecret(Some(name), Some(payload))) => handle(cmd.create(Secret(name, payload)))
-      case Some(Action.ListSecrets(filter))                    => handle(cmd.filter(filter))
-      case Some(Action.Empty)                                  => IO.println(s"empty")
-      case other                                               => IO.println(other.toString)
+      case Some(Action.InitWithPath(path)) => handle(cmd.initWithPath(path))
+      case Some(Action.CreateSecret(Some(name), Some(payload))) =>
+        handle(cmd.create(Secret(name, payload)))
+      case Some(Action.ListSecrets(filter)) => handle(cmd.filter(filter))
+      case Some(Action.Empty)               => IO.println(s"empty")
+      case other                            => IO.println(other.toString)
 
     r *> ExitCode.Success.pure[IO]

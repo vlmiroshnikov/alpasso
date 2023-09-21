@@ -10,7 +10,6 @@ import java.nio.file.Path
 enum SecretFilter:
   case Empty
 
-
 enum Action:
   case InitWithPath(repoDir: Path)
   case InitFromRepository(url: URL)
@@ -70,5 +69,3 @@ case class ArgParser(repoDirDefault: Path):
       list
     )
 end ArgParser
-
-

@@ -11,6 +11,7 @@ extension [F[_]: Functor, A, B](fa: F[Either[A, B]])
 
   def toEitherT: EitherT[F, A, B] = EitherT(fa)
 
-  def liftTo[E](using up: Upcast[E, A]): EitherT[F, E, B] =
+  def liftTo[E](
+      using
+      up: Upcast[E, A]): EitherT[F, E, B] =
     EitherT(fa).leftMap(a => up.upcast(a))
-

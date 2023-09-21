@@ -9,14 +9,17 @@ import io.circe.*
 import io.circe.syntax.*
 import pass.cli.*
 import pass.core.model.*
-import pass.service.fs.{Branch, LocalStorage}
+import pass.service.fs.{ Branch, LocalStorage }
 import pass.service.fs.model.*
+
+import pass.service.git.*
+
 import pass.cmdline.model.*
 import pass.common.syntax.*
 
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
-import java.nio.file.{Files, Path, StandardOpenOption}
+import java.nio.file.{ Files, Path, StandardOpenOption }
 
 enum Err:
   case AlreadyExists(name: SecretName)
@@ -27,7 +30,6 @@ enum Err:
 object Err:
   given Upcast[Err, GitError]   = fromGitError(_)
   given Upcast[Err, StorageErr] = fromStorageErr(_)
-
 
   private def fromGitError(ge: GitError): Err =
     ge match
@@ -58,12 +60,13 @@ object Command:
 
     override def filter(filter: SecretFilter): F[RejectionOr[Node[Branch[SecretView]]]] =
       val buildTree = for
-        tree     <- ls.walkTree().liftTo[Err]
+        tree <- ls.walkTree().liftTo[Err]
         treeView <- tree.traverse:
-          case Branch.Empty(dir) =>   EitherT.pure(Branch.Empty(dir))
-          case Branch.Solid(dir, s) => ls.loadMeta(s)
-                                      .liftTo[Err]
-                                      .map(m => Branch.Solid(dir, SecretView(s.name, MetadataView())))
+                      case Branch.Empty(dir) => EitherT.pure(Branch.Empty(dir))
+                      case Branch.Solid(dir, s) =>
+                        ls.loadMeta(s)
+                          .liftTo[Err]
+                          .map(m => Branch.Solid(dir, SecretView(s.name, MetadataView())))
       yield treeView
 
       buildTree.value
@@ -75,7 +78,9 @@ object Command:
         for
           _    <- git.verify().liftTo[Err]
           file <- ls.createFiles(secret.map(ps => Payload.from(ps.rawData))).liftTo[Err]
-          _    <- git.addFiles(NonEmptyList.of(file.payload.secret, file.payload.meta),commitMsg).liftTo[Err]
+          _ <- git
+                 .addFiles(NonEmptyList.of(file.payload.secret, file.payload.meta), commitMsg)
+                 .liftTo[Err]
         yield SecretView(file.name, MetadataView())
 
       val result =
@@ -87,5 +92,3 @@ object Command:
       result.value
 
 end Command
-
-

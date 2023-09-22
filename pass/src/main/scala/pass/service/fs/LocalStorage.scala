@@ -30,6 +30,18 @@ enum Branch[+A]:
 
 object Branch:
 
+  extension [A](b: Branch[A])
+
+    def toEmpty: Branch[A] =
+      b match
+        case a @ Empty(_)   => a
+        case Solid(path, _) => Empty(path)
+
+    def fold[B](empty: => B, solid: A => B): B =
+      b match
+        case Branch.Empty(_)       => empty
+        case Branch.Solid(_, data) => solid(data)
+
   given [A: Show]: Show[Branch[A]] = Show.show:
     case Branch.Empty(path)       => path.getFileName.toString
     case Branch.Solid(path, data) => s"${path.getFileName.toString} ${data.show}"
@@ -61,18 +73,18 @@ object LocalStorage:
     override def repoDir(): F[StorageResult[Path]] = ctx.repoDir.asRight.pure
 
     override def walkTree(): F[StorageResult[Node[Branch[Secret[RawStoreEntry]]]]] =
+      def mapBranch: Entry => Branch[Secret[RawStoreEntry]] =
+        case Entry(dir, Chain.nil) => Branch.Empty(dir)
+        case Entry(dir, files) =>
+          (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
+            case (Some(meta), Some(payload)) =>
+              Branch
+                .Solid(dir, Secret(SecretName.of(dir.toString), RawStoreEntry(payload, meta)))
+            case _ => Branch.Empty(dir)
+
       for
         tree <- blocking(walkFileTree(ctx.repoDir, exceptDir = _.endsWith(".git")))
-        tr <- tree.traverse:
-                case Entry(dir, Chain.nil) => Branch.Empty(dir).pure[F]
-                case Entry(dir, files) =>
-                  (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
-                    case (Some(meta), Some(payload)) =>
-                      Branch
-                        .Solid(dir,
-                               Secret(SecretName.of(dir.toString), RawStoreEntry(payload, meta)))
-                        .pure[F]
-                    case _ => Branch.Empty(dir).pure[F]
+        tr = tree.traverse(v => Id(mapBranch(v)))
       yield tr.asRight
 
     override def loadMeta(secret: Secret[RawStoreEntry]): F[StorageResult[Secret[Metadata]]] =
@@ -147,8 +159,41 @@ def walkFileTree(root: Path, exceptDir: Path => Boolean): Node[Entry] =
 
 import pass.core.model.given
 
+type Mark[A] = Either[A, A]
+
+def cutTree[A](root: Node[Branch[A]], f: A => Boolean): Option[Node[Branch[A]]] =
+
+  val marked = root.traverse(br => Id(br.fold(br.asLeft, sold => Either.cond(f(sold), br, br))))
+
+  def filter_(root: Node[Mark[Branch[A]]]): Option[Node[Branch[A]]] =
+    val sibs = root.siblings.traverseFilter(sib => Id(filter_(sib)))
+
+    (sibs, root.data) match
+      case (Chain.nil, Left(a))  => none
+      case (Chain.nil, Right(a)) => Node(a, Chain.nil).some
+      case (nonEmpty, Left(a))   => Node(a.toEmpty, nonEmpty).some
+      case (nonEmpty, Right(a))  => Node(a, nonEmpty).some
+
+  filter_(marked)
+
+def mapBranch: Entry => Branch[Secret[RawStoreEntry]] =
+  case Entry(dir, Chain.nil) => Branch.Empty(dir)
+  case Entry(dir, files) =>
+    (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
+      case (Some(meta), Some(payload)) =>
+        Branch
+          .Solid(dir, Secret(SecretName.of(dir.toString), RawStoreEntry(payload, meta)))
+      case _ => Branch.Empty(dir)
+
 @main
 def main =
-  val tree          = walkFileTree(Paths.get("", ".tmps"), _.endsWith(".git"))
   given Show[Entry] = Show.show(e => s"path = ${e.path}  [${e.files.toList.mkString(", ")}]")
-  println(tree.show)
+
+  val tree = walkFileTree(Paths.get("", ".tmps"), _.endsWith(".git"))
+  val bree: Node[Branch[Secret[RawStoreEntry]]] = tree.traverse(a => Id(mapBranch(a)))
+
+  val res: Option[Node[Branch[Secret[RawStoreEntry]]]] = cutTree(bree, _.name.contains("email"))
+
+  given [A]: Show[Secret[A]] = Show.show(s => s"${s.name}")
+
+  println(res.show)

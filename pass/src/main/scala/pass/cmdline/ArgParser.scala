@@ -8,6 +8,7 @@ import java.net.URL
 import java.nio.file.Path
 
 enum SecretFilter:
+  case NameMatch(pattern: String)
   case Empty
 
 enum Action:

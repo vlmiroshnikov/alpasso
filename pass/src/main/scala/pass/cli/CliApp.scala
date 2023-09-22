@@ -4,7 +4,7 @@ import cats.*
 import cats.data.*
 import cats.syntax.all.*
 import cats.effect.*
-import scopt.{OParser, RenderingMode}
+import scopt.{ OParser, RenderingMode }
 
 import java.net.URL
 import java.nio.file.*

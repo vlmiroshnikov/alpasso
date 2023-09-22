@@ -94,20 +94,21 @@ object LocalStorage:
         if !exists then
           StorageErr.FileNotFound(metaPath, secret.name).asLeft[Secret[Metadata]].pure[F]
         else
-          for
-            raw  <- blocking(Files.readString(metaPath))
-          yield Metadata.fromString(raw)
-                        .bimap(_ => StorageErr.MetadataFileCorrupted(metaPath,secret.name), Secret(secret.name, _))
+          for raw <- blocking(Files.readString(metaPath))
+          yield Metadata
+            .fromString(raw)
+            .bimap(_ => StorageErr.MetadataFileCorrupted(metaPath, secret.name),
+                   Secret(secret.name, _))
 
       }
 
     override def createFiles(secret: Secret[(Payload, Metadata)]): F[StorageResult[Secret[RawStoreEntry]]] =
-      val path    = ctx.resolve(secret.name)
+      val path = ctx.resolve(secret.name)
 
-      val payload = secret.payload._1
+      val payload  = secret.payload._1
       val metadata = secret.payload._2
 
-      val metaPath = path.resolve("meta")
+      val metaPath    = path.resolve("meta")
       val payloadPath = path.resolve("payload")
 
       blocking(Files.exists(path) && Files.exists(metaPath)).flatMap { exists =>

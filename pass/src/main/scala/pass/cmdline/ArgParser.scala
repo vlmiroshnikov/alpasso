@@ -18,8 +18,12 @@ enum OutputFormat:
 enum Action:
   case InitWithPath(repoDir: Path)
   case InitFromRepository(url: URL)
-  case CreateSecret(name: Option[String], secret: Option[SecretPayload], meta: Map[String, String] = Map.empty)
-  case FindSecrets(filter: Option[SecretFilter], outputFormat: OutputFormat  = OutputFormat.Tree)
+
+  case CreateSecret(
+      name: Option[String],
+      secret: Option[SecretPayload],
+      meta: Map[String, String] = Map.empty)
+  case FindSecrets(filter: Option[SecretFilter], outputFormat: OutputFormat = OutputFormat.Tree)
   case Empty
 
 case class ArgParser(repoDirDefault: Path):
@@ -47,7 +51,7 @@ case class ArgParser(repoDirDefault: Path):
         .text("metadata")
         .action {
           case (tags, a: Action.CreateSecret) => a.copy(meta = tags)
-          case (_, a) => a
+          case (_, a)                         => a
         },
       checkConfig {
         case a: Action.CreateSecret if a.name.nonEmpty && a.secret.nonEmpty => success
@@ -64,11 +68,10 @@ case class ArgParser(repoDirDefault: Path):
       checkConfig(c => success)
     )
 
-  private val find =cmd("find")
+  private val find = cmd("find")
     .children(
       opt[Unit]("all")
-        .action((_, c) => Action.FindSecrets(SecretFilter.All.some))
-      ,
+        .action((_, c) => Action.FindSecrets(SecretFilter.All.some)),
       opt[String]("predicate")
         .optional()
         .action((str, c) => Action.FindSecrets(SecretFilter.Predicate(str).some))

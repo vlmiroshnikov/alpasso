@@ -7,5 +7,6 @@ enum StorageErr:
   case NotInitialized
   case DirAlreadyExists(path: Path, name: SecretName)
   case FileNotFound(path: Path, name: SecretName)
+  case MetadataFileCorrupted(path: Path, name: SecretName)
 
 type StorageResult[A] = Either[StorageErr, A]

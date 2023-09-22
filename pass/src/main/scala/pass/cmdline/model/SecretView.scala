@@ -14,7 +14,7 @@ object MetadataView:
 case class SecretView(name: SecretName, metadata: MetadataView)
 
 object SecretView:
-  given Show[SecretView] = Show.show(s => s"secret: ${s.name} ${s.metadata.toString}")
+  given Show[SecretView] = Show.show(s => s"[${s.name}]* ${s.metadata.toString}")
 
 case class StorageView(repoDir: Path)
 

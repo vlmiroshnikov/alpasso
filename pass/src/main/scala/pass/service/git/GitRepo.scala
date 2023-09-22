@@ -19,9 +19,6 @@ enum GitError extends Throwable with NoStackTrace:
   case RepositoryIsDirty
   case UnexpectedError
 
-enum GitRepoStatus:
-  case Clean, Dirty
-
 trait GitRepo[F[_]]:
   def info: F[Path]
   def verify(): F[Either[GitError, Unit]]

@@ -20,9 +20,9 @@ trait StorageCtx:
 
 trait LocalStorage[F[_]]:
   def repoDir(): F[StorageResult[Path]]
-  def createFiles(secret: Secret[Payload]): F[StorageResult[Secret[RawStoreEntry]]]
+  def createFiles(secret: Secret[(Payload, Metadata)]): F[StorageResult[Secret[RawStoreEntry]]]
   def loadMeta(secret: Secret[RawStoreEntry]): F[StorageResult[Secret[Metadata]]]
-  def walkTree(): F[StorageResult[Node[Branch[Secret[RawStoreEntry]]]]]
+  def walkTree: F[StorageResult[Node[Branch[Secret[RawStoreEntry]]]]]
 
 enum Branch[+A]:
   case Empty(path: Path)
@@ -44,7 +44,7 @@ object Branch:
 
   given [A: Show]: Show[Branch[A]] = Show.show:
     case Branch.Empty(path)       => path.getFileName.toString
-    case Branch.Solid(path, data) => s"${path.getFileName.toString} ${data.show}"
+    case Branch.Solid(path, data) => data.show
 
   given Functor[Branch] = new Functor[Branch]:
 
@@ -72,14 +72,14 @@ object LocalStorage:
 
     override def repoDir(): F[StorageResult[Path]] = ctx.repoDir.asRight.pure
 
-    override def walkTree(): F[StorageResult[Node[Branch[Secret[RawStoreEntry]]]]] =
+    override def walkTree: F[StorageResult[Node[Branch[Secret[RawStoreEntry]]]]] =
       def mapBranch: Entry => Branch[Secret[RawStoreEntry]] =
         case Entry(dir, Chain.nil) => Branch.Empty(dir)
         case Entry(dir, files) =>
           (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
             case (Some(meta), Some(payload)) =>
-              Branch
-                .Solid(dir, Secret(SecretName.of(dir.toString), RawStoreEntry(payload, meta)))
+              val name = SecretName.of(ctx.repoDir.relativize(dir).toString)
+              Branch.Solid(dir, Secret(name, RawStoreEntry(payload, meta)))
             case _ => Branch.Empty(dir)
 
       for
@@ -94,19 +94,25 @@ object LocalStorage:
         if !exists then
           StorageErr.FileNotFound(metaPath, secret.name).asLeft[Secret[Metadata]].pure[F]
         else
-          for raw <- blocking(Files.readString(metaPath))
-          yield Secret(secret.name, Metadata.Empty).asRight[StorageErr]
+          for
+            raw  <- blocking(Files.readString(metaPath))
+          yield Metadata.fromString(raw)
+                        .bimap(_ => StorageErr.MetadataFileCorrupted(metaPath,secret.name), Secret(secret.name, _))
+
       }
 
-    override def createFiles(secret: Secret[Payload]): F[StorageResult[Secret[RawStoreEntry]]] =
+    override def createFiles(secret: Secret[(Payload, Metadata)]): F[StorageResult[Secret[RawStoreEntry]]] =
       val path    = ctx.resolve(secret.name)
-      val payload = secret.payload
 
-      blocking(Files.exists(path)).flatMap { exists =>
-        if exists then StorageErr.DirAlreadyExists(path, secret.name).asLeft.pure[F]
+      val payload = secret.payload._1
+      val metadata = secret.payload._2
+
+      val metaPath = path.resolve("meta")
+      val payloadPath = path.resolve("payload")
+
+      blocking(Files.exists(path) && Files.exists(metaPath)).flatMap { exists =>
+        if exists then StorageErr.DirAlreadyExists(metaPath, secret.name).asLeft.pure[F]
         else
-          val metaPath    = path.resolve("meta")
-          val payloadPath = path.resolve("payload")
           for
             _ <- blocking(Files.createDirectories(path))
             _ <- blocking(
@@ -116,7 +122,7 @@ object LocalStorage:
                                StandardOpenOption.WRITE))
             _ <- blocking(
                    Files.writeString(metaPath,
-                                     "",
+                                     metadata.rawString,
                                      StandardOpenOption.CREATE_NEW,
                                      StandardOpenOption.WRITE))
           yield Secret(secret.name, RawStoreEntry(payloadPath, metaPath)).asRight
@@ -192,7 +198,7 @@ def main =
   val tree = walkFileTree(Paths.get("", ".tmps"), _.endsWith(".git"))
   val bree: Node[Branch[Secret[RawStoreEntry]]] = tree.traverse(a => Id(mapBranch(a)))
 
-  val res: Option[Node[Branch[Secret[RawStoreEntry]]]] = cutTree(bree, _.name.contains("email"))
+  val res: Option[Node[Branch[Secret[RawStoreEntry]]]] = cutTree(bree, _ => true)
 
   given [A]: Show[Secret[A]] = Show.show(s => s"${s.name}")
 

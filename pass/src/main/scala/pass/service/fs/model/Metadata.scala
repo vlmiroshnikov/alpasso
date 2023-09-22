@@ -2,25 +2,20 @@ package pass.service.fs.model
 
 import cats.*
 import cats.syntax.all.*
-import io.circe.{ Decoder, Encoder, Json }
+import io.circe.*
+import io.circe.syntax.*
 
-import java.nio.file.Path
+opaque type Metadata = JsonObject
 
-enum Metadata:
-  case Empty
 
 object Metadata:
+  def fromString(raw: String): Either[Exception, Metadata] =
+    parser.parse(raw).flatMap(_.as[JsonObject])
 
-  given Encoder[Metadata] = Encoder.instance[Metadata]:
-    // case Metadata.UserData(tags) => Json.obj(tags.map(t => t.name -> t.value.asJson): _*)
-    case Empty => Json.obj()
+  extension (m: Metadata)
+    def rawString: String = Printer.spaces2.print(m.toJson)
 
-  given Decoder[Metadata] = Decoder.decodeJsonObject.emap { _ =>
-    Metadata.Empty.asRight
+  def of(kv: Map[String, String]): Metadata = JsonObject.fromMap(kv.view.mapValues(_.asJson).toMap)
 
-//    obj
-//      .toList
-//      .traverse((k, v) => (k.asRight, v.as[String]).mapN(Tag.apply))
-//      .map(Metadata.Empty)
-//      .leftMap(_.getMessage)
-  }
+  val empty: Metadata = JsonObject.empty
+

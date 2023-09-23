@@ -2,8 +2,9 @@ package pass.common.syntax
 
 import cats.Functor
 import cats.data.EitherT
-import glass.Upcast
 import pass.cmdline.Err
+
+import glass.Upcast
 
 type RejectionOr[A] = Either[Err, A]
 

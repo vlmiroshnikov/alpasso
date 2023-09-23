@@ -1,7 +1,8 @@
 package pass.service.fs.model
 
-import pass.core.model.SecretName
 import java.nio.file.Path
+
+import pass.core.model.SecretName
 
 enum StorageErr:
   case NotInitialized

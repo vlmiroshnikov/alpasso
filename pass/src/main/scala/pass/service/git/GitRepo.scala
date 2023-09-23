@@ -1,18 +1,20 @@
 package pass.service.git
 
+import java.nio.file.*
+
+import scala.util.*
+import scala.util.control.NoStackTrace
+
 import cats.*
 import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
+
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.errors.RepositoryNotFoundException
 import org.eclipse.jgit.lib.{ Ref, Repository }
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
-
-import java.nio.file.*
-import scala.util.*
-import scala.util.control.NoStackTrace
 
 enum GitError extends Throwable with NoStackTrace:
   case RepositoryNotFound(path: Path)

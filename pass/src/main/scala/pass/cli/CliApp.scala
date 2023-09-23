@@ -1,19 +1,20 @@
 package pass.cli
 
-import cats.*
-import cats.data.*
-import cats.syntax.all.*
-import cats.effect.*
-import scopt.{ OParser, RenderingMode }
-
 import java.net.URL
 import java.nio.file.*
-import pass.core.model.*
-import pass.core.model.given
+
+import cats.*
+import cats.data.*
+import cats.effect.*
+import cats.syntax.all.*
 import pass.cmdline.*
 import pass.common.syntax.RejectionOr
+import pass.core.model.*
+import pass.core.model.given
 import pass.service.fs.*
 import pass.service.fs.model.Metadata
+
+import scopt.{ OParser, RenderingMode }
 
 object CliApp extends IOApp:
 

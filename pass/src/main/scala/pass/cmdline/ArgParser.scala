@@ -1,11 +1,12 @@
 package pass.cmdline
 
-import cats.syntax.all.*
-import pass.core.model.*
-import scopt.OParser
-
 import java.net.URL
 import java.nio.file.Path
+
+import cats.syntax.all.*
+import pass.core.model.*
+
+import scopt.OParser
 
 enum SecretFilter:
   case Predicate(pattern: String)

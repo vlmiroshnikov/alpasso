@@ -2,6 +2,7 @@ package pass.service.fs.model
 
 import cats.*
 import cats.syntax.all.*
+
 import io.circe.*
 import io.circe.syntax.*
 

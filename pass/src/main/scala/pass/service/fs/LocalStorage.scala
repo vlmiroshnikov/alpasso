@@ -1,18 +1,20 @@
 package pass.service.fs
 
-import cats.*
-import cats.data.*
-import cats.syntax.all.*
-import cats.effect.*
-import io.circe.{ Decoder, Encoder, Json }
-import pass.core.model.*
-import pass.service.fs.model.*
-
 import java.io.IOException
 import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.{ FileVisitResult, FileVisitor, Files, Path, Paths }
+
 import scala.collection.mutable
+
+import cats.*
+import cats.data.*
+import cats.effect.*
+import cats.syntax.all.*
+import pass.core.model.*
+import pass.service.fs.model.*
+
+import io.circe.{ Decoder, Encoder, Json }
 
 trait StorageCtx:
   def repoDir: Path
@@ -98,7 +100,8 @@ object LocalStorage:
           yield Metadata
             .fromString(raw)
             .bimap(_ => StorageErr.MetadataFileCorrupted(metaPath, secret.name),
-                   Secret(secret.name, _))
+                   Secret(secret.name, _)
+            )
 
       }
 
@@ -120,12 +123,16 @@ object LocalStorage:
                    Files.write(payloadPath,
                                payload.byteArray,
                                StandardOpenOption.CREATE_NEW,
-                               StandardOpenOption.WRITE))
+                               StandardOpenOption.WRITE
+                   )
+                 )
             _ <- blocking(
                    Files.writeString(metaPath,
                                      metadata.rawString,
                                      StandardOpenOption.CREATE_NEW,
-                                     StandardOpenOption.WRITE))
+                                     StandardOpenOption.WRITE
+                   )
+                 )
           yield Secret(secret.name, RawStoreEntry(payloadPath, metaPath)).asRight
       }
 end LocalStorage
@@ -193,7 +200,7 @@ def mapBranch: Entry => Branch[Secret[RawStoreEntry]] =
       case _ => Branch.Empty(dir)
 
 @main
-def main =
+def main(): Unit =
   given Show[Entry] = Show.show(e => s"path = ${e.path}  [${e.files.toList.mkString(", ")}]")
 
   val tree = walkFileTree(Paths.get("", ".tmps"), _.endsWith(".git"))

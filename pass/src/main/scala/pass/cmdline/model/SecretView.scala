@@ -1,11 +1,11 @@
 package pass.cmdline.model
 
+import java.nio.file.Path
+
 import cats.*
 import cats.syntax.all.*
 import pass.core.model.*
 import pass.service.fs.model.Metadata
-
-import java.nio.file.Path
 
 case class MetadataView(metadata: Metadata)
 

@@ -1,19 +1,21 @@
 package pass.cmdline
 
+import java.nio.file.Path
+
+import scala.util.matching.Regex
+
 import cats.*
 import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
-import glass.*
+import pass.cmdline.model.*
+import pass.common.syntax.*
 import pass.core.model.*
 import pass.service.fs.*
 import pass.service.fs.model.*
 import pass.service.git.*
-import pass.cmdline.model.*
-import pass.common.syntax.*
 
-import java.nio.file.Path
-import scala.util.matching.Regex
+import glass.*
 
 enum Err:
   case AlreadyExists(name: SecretName)

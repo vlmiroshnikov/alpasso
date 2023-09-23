@@ -8,14 +8,22 @@ import java.net.URL
 import java.nio.file.Path
 
 enum SecretFilter:
+  case Predicate(pattern: String)
+  case All
   case Empty
 
+enum OutputFormat:
+  case Tree, Table
 
 enum Action:
   case InitWithPath(repoDir: Path)
   case InitFromRepository(url: URL)
-  case CreateSecret(name: Option[SecretName], secret: Option[SecretPayload])
-  case ListSecrets(filter: SecretFilter)
+
+  case CreateSecret(
+      name: Option[String],
+      secret: Option[SecretPayload],
+      meta: Map[String, String] = Map.empty)
+  case FindSecrets(filter: Option[SecretFilter], outputFormat: OutputFormat = OutputFormat.Tree)
   case Empty
 
 case class ArgParser(repoDirDefault: Path):
@@ -23,19 +31,27 @@ case class ArgParser(repoDirDefault: Path):
   import builder.*
 
   private val create = cmd("create")
-    .text("create new secret.")
     .children(
       arg[String]("name")
         .required()
+        .text("secret name")
         .action {
-          case (name, a: Action.CreateSecret) => a.copy(name = SecretName.of(name).some)
-          case (name, _)                      => Action.CreateSecret(SecretName.of(name).some, none)
+          case (name, a: Action.CreateSecret) => a.copy(name = name.some)
+          case (name, _)                      => Action.CreateSecret(name.some, none)
         },
       arg[String]("secret")
         .required()
+        .text("secret phrase")
         .action {
           case (s, a: Action.CreateSecret) => a.copy(secret = SecretPayload.fromString(s).some)
           case (s, _) => Action.CreateSecret(name = none, secret = SecretPayload.fromString(s).some)
+        },
+      opt[Map[String, String]]("tags")
+        .valueName("k1=v1,k2=v2...")
+        .text("metadata")
+        .action {
+          case (tags, a: Action.CreateSecret) => a.copy(meta = tags)
+          case (_, a)                         => a
         },
       checkConfig {
         case a: Action.CreateSecret if a.name.nonEmpty && a.secret.nonEmpty => success
@@ -45,7 +61,6 @@ case class ArgParser(repoDirDefault: Path):
     )
 
   private val init = cmd("init")
-    .text("init repository")
     .children(
       opt[Path]("path")
         .withFallback(() => repoDirDefault)
@@ -53,22 +68,21 @@ case class ArgParser(repoDirDefault: Path):
       checkConfig(c => success)
     )
 
-  private val list = cmd("list")
-    .text("list")
-    .abbr("ls")
+  private val find = cmd("find")
     .children(
-      arg[String]("string")
-        .action((str, c) => Action.ListSecrets(SecretFilter.Empty))
+      opt[Unit]("all")
+        .action((_, c) => Action.FindSecrets(SecretFilter.All.some)),
+      opt[String]("predicate")
+        .optional()
+        .action((str, c) => Action.FindSecrets(SecretFilter.Predicate(str).some))
     )
 
   def parser: OParser[Unit, Action] =
     OParser.sequence(
       programName("pass"),
-      head("pass", "0.0.1"),
+      // help("help"),
       init,
       create,
-      list
+      find
     )
 end ArgParser
-
-

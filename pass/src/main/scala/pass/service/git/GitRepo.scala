@@ -1,28 +1,23 @@
-package pass.cli
+package pass.service.git
 
-import scala.util.*
 import cats.*
-import cats.data.NonEmptyList
-import cats.syntax.all.*
+import cats.data.*
 import cats.effect.*
-import org.eclipse.jgit.errors.RepositoryNotFoundException
+import cats.syntax.all.*
 import org.eclipse.jgit.api.Git
-import org.eclipse.jgit.lib.Ref
-import org.eclipse.jgit.lib.Repository
+import org.eclipse.jgit.errors.RepositoryNotFoundException
+import org.eclipse.jgit.lib.{ Ref, Repository }
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 
-import java.io.File
 import java.nio.file.*
+import scala.util.*
 import scala.util.control.NoStackTrace
 
 enum GitError extends Throwable with NoStackTrace:
   case RepositoryNotFound(path: Path)
   case RepositoryIsDirty
   case UnexpectedError
-
-enum GitRepoStatus:
-  case Clean, Dirty
 
 trait GitRepo[F[_]]:
   def info: F[Path]
@@ -31,14 +26,19 @@ trait GitRepo[F[_]]:
 
 object GitRepo:
 
-  def openExists[F[_]: Sync](repoDir: Path): Resource[F, GitRepo[F]] =
+  def openExists[F[_]](
+      repoDir: Path
+    )(using
+      F: Sync[F]): Resource[F, GitRepo[F]] =
+    import F.blocking
+
     val location = repoDir.resolve(".git")
 
     def adaptErr: Throwable => GitError =
       case e: RepositoryNotFoundException => GitError.RepositoryNotFound(location)
       case _                              => GitError.UnexpectedError
 
-    val repoF = Sync[F].blocking:
+    val repoF = blocking:
       val builder = new FileRepositoryBuilder()
       builder
         .setGitDir(location.toFile)

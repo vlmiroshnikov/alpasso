@@ -8,8 +8,8 @@ lazy val core = project
     libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.bouncy ++ Deps.fs2
   )
 
-lazy val pass = project
-  .in(file("pass"))
+lazy val alpasso = project
+  .in(file("alpasso"))
   .dependsOn(core)
   .settings(Settings.common)
   .settings(
@@ -19,4 +19,4 @@ lazy val pass = project
 lazy val root = project
   .in(file("."))
   .settings(Settings.common)
-  .aggregate(pass)
+  .aggregate(alpasso)

@@ -7,6 +7,7 @@ import cats.*
 import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
+
 import alpasso.cmdline.*
 import alpasso.cmdline.model.*
 import alpasso.common.syntax.RejectionOr
@@ -36,7 +37,11 @@ object CliApp extends IOApp:
     val r = OParser.parse(parser, args, Action.Empty) match
       case Some(Action.InitWithPath(path)) => handle(cmd.initWithPath(path))
       case Some(Action.CreateSecret(Some(name), Some(payload), tags)) =>
-        handle(cmd.create(name, payload, Metadata.of(tags)))
+        handle(cmd.create(SecretName.of(name), payload, Metadata.of(tags)))
+
+      case Some(Action.UpdateSecret(Some(name), payload, tags)) =>
+        handle(cmd.update(SecretName.of(name), payload, tags.map(Metadata.of)))
+
       case Some(Action.FindSecrets(filter, format)) =>
         format match
           case OutputFormat.Tree =>
@@ -56,7 +61,6 @@ object CliApp extends IOApp:
               .value
             handle(r1)
 
-      case Some(Action.Empty) => IO.println(OParser.usage(parser, RenderingMode.TwoColumns))
-      case other              => IO.println(other.toString)
+      case _ => IO.println(OParser.usage(parser, RenderingMode.TwoColumns))
 
     r *> ExitCode.Success.pure[IO]

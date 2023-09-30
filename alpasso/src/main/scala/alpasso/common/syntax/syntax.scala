@@ -2,6 +2,7 @@ package alpasso.common.syntax
 
 import cats.Functor
 import cats.data.EitherT
+
 import alpasso.cmdline.Err
 
 import glass.Upcast

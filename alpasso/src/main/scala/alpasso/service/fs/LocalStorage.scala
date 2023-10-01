@@ -23,45 +23,13 @@ trait StorageCtx:
 
 trait LocalStorage[F[_]]:
   def repoDir(): F[StorageResult[Path]]
-  def create(name: SecretName, payload: Payload, meta: Metadata): F[StorageResult[Secret[RawStoreLocations]]]
-  def update(name: SecretName, payload: Payload, meta: Metadata): F[StorageResult[Secret[RawStoreLocations]]]
+  def create(name: SecretName, payload: RawSecretData, meta: Metadata): F[StorageResult[Secret[RawStoreLocations]]]
+  def update(name: SecretName, payload: RawSecretData, meta: Metadata): F[StorageResult[Secret[RawStoreLocations]]]
 
-  def loadPayload(secret: Secret[Path]): F[StorageResult[Secret[Payload]]]
+  def loadPayload(secret: Secret[Path]): F[StorageResult[Secret[RawSecretData]]]
   def loadMeta(secret: Secret[Path]): F[StorageResult[Secret[Metadata]]]
 
   def walkTree: F[StorageResult[Node[Branch[Secret[RawStoreLocations]]]]]
-
-enum Branch[+A]:
-  case Empty(path: Path)
-  case Solid(path: Path, data: A)
-
-object Branch:
-
-  extension [A](b: Branch[A])
-
-    def toEmpty: Branch[A] =
-      b match
-        case a @ Empty(_)   => a
-        case Solid(path, _) => Empty(path)
-
-    def fold[B](empty: => B, solid: A => B): B =
-      b match
-        case Branch.Empty(_)       => empty
-        case Branch.Solid(_, data) => solid(data)
-
-    def toOption: Option[A] =
-      fold(none[A], identity(_).some)
-
-  given [A: Show]: Show[Branch[A]] = Show.show:
-    case Branch.Empty(path)       => path.getFileName.toString
-    case Branch.Solid(path, data) => data.show
-
-  given Functor[Branch] = new Functor[Branch]:
-
-    override def map[A, B](fa: Branch[A])(f: A => B): Branch[B] =
-      fa match
-        case Empty(dir)        => Branch.Empty(dir)
-        case Solid(path, data) => Branch.Solid(path, f(data))
 
 object LocalStorage:
 
@@ -111,20 +79,20 @@ object LocalStorage:
             .bimap(_ => StorageErr.MetadataFileCorrupted(metaPath, secret.name),
                    Secret(secret.name, _)
             )
-
       }
 
-    override def loadPayload(secret: Secret[Path]): F[StorageResult[Secret[Payload]]] =
+    override def loadPayload(secret: Secret[Path]): F[StorageResult[Secret[RawSecretData]]] =
       val path = secret.payload
 
       blocking(Files.exists(path)).flatMap { exists =>
-        if !exists then StorageErr.FileNotFound(path, secret.name).asLeft[Secret[Payload]].pure[F]
+        if !exists then
+          StorageErr.FileNotFound(path, secret.name).asLeft[Secret[RawSecretData]].pure[F]
         else
           for raw <- blocking(Files.readAllBytes(path))
-          yield Secret(secret.name, Payload.from(raw)).asRight
+          yield Secret(secret.name, RawSecretData.from(raw)).asRight
       }
 
-    override def create(name: SecretName, payload: Payload, meta: Metadata): F[StorageResult[Secret[RawStoreLocations]]] =
+    override def create(name: SecretName, payload: RawSecretData, meta: Metadata): F[StorageResult[Secret[RawStoreLocations]]] =
       val path = ctx.resolve(name)
 
       val metaPath    = path.resolve("meta")
@@ -144,7 +112,7 @@ object LocalStorage:
           yield Secret(name, RawStoreLocations(payloadPath, metaPath)).asRight
       }
 
-    override def update(name: SecretName, payload: Payload, metadata: Metadata): F[StorageResult[Secret[RawStoreLocations]]] =
+    override def update(name: SecretName, payload: RawSecretData, metadata: Metadata): F[StorageResult[Secret[RawStoreLocations]]] =
       val path = ctx.resolve(name)
 
       val metaPath    = path.resolve("meta")

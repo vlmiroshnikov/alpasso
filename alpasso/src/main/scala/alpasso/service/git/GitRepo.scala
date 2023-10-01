@@ -23,8 +23,8 @@ enum GitError extends Throwable with NoStackTrace:
 
 trait GitRepo[F[_]]:
   def info: F[Path]
-  def verify(): F[Either[GitError, Unit]]
-  def addFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]]
+  def verify: F[Either[GitError, Unit]]
+  def commitFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]]
 
 object GitRepo:
 
@@ -79,10 +79,10 @@ object GitRepo:
 
     override def info: F[Path] = blocking(repository.getWorkTree.toPath)
 
-    override def verify(): F[Either[GitError, Unit]] =
+    override def verify: F[Either[GitError, Unit]] =
       verify_(repository)
 
-    override def addFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]] =
+    override def commitFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]] =
       blocking:
         val git        = new Git(repository)
         val addCommand = git.add()

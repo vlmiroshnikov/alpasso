@@ -1,6 +1,5 @@
 package alpasso.cli
 
-import java.net.URL
 import java.nio.file.*
 
 import cats.*
@@ -9,12 +8,12 @@ import cats.effect.*
 import cats.syntax.all.*
 
 import alpasso.cmdline.*
-import alpasso.cmdline.model.*
-import alpasso.common.syntax.RejectionOr
+import alpasso.cmdline.view.*
+import alpasso.common.syntax.*
 import alpasso.core.model.*
 import alpasso.core.model.given
 import alpasso.service.fs.*
-import alpasso.service.fs.model.Metadata
+import alpasso.service.fs.model.*
 
 import scopt.{ OParser, RenderingMode }
 
@@ -61,6 +60,7 @@ object CliApp extends IOApp:
               .value
             handle(r1)
 
-      case _ => IO.println(OParser.usage(parser, RenderingMode.TwoColumns))
+      case v =>
+        IO.println(v.toString) *> IO.println(OParser.usage(parser, RenderingMode.TwoColumns))
 
     r *> ExitCode.Success.pure[IO]

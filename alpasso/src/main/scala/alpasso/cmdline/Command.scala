@@ -45,6 +45,7 @@ object Err:
 
 case class ErrorView(code: String, explain: Option[String])
 
+
 trait Command[F[_]]:
   def initWithPath(repoDir: Path): F[RejectionOr[StorageView]]
   def create(name: SecretName, payload: SecretPayload, meta: Metadata): F[RejectionOr[SecretView]]

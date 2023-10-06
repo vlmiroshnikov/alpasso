@@ -106,7 +106,7 @@ object Command:
         for
           locations <- ls.update(secret.name, secret.payload._1, secret.payload._2).liftTo[Err]
           files = NonEmptyList.of(locations.payload.secretData, locations.payload.metadata)
-          _ <- git.commitFiles(files, commitMsg).liftTo[Err]
+          _       <- git.commitFiles(files, commitMsg).liftTo[Err]
           updated <- ls.loadMeta(locations.map(_.metadata)).liftTo[Err]
         yield SecretView(updated.name, MetadataView(updated.payload))
 

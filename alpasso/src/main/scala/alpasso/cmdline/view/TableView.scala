@@ -11,5 +11,6 @@ object TableView:
 
   given [R: Show]: Show[TableView[R]] = Show.show { t =>
     val rw = t.rows.map(r => f"|${r.id}%2d | ${r.data.show}%50s |")
-    (rw :+ "|" + "-".repeat(56) + "|").mkString("\n")
+    val stroke = "|" + "-".repeat(56) + "|"
+    (stroke +: rw :+ stroke).mkString("\n")
   }

@@ -83,6 +83,7 @@ case class ArgParser(repoDirDefault: Path):
         .action {
           case (name, a: Action.UpdateSecret) => a.copy(name = name.some)
           case (name, Action.Empty)           => Action.UpdateSecret(name = name.some, none, none)
+          case (name, a)                      => a
         },
       arg[String]("secret")
         .optional()
@@ -91,6 +92,7 @@ case class ArgParser(repoDirDefault: Path):
           case (s, a: Action.UpdateSecret) => a.copy(secret = SecretPayload.fromString(s).some)
           case (s, Action.Empty) =>
             Action.UpdateSecret(secret = SecretPayload.fromString(s).some, name = none, meta = none)
+          case (name, a)                   => a
         },
       opt[Map[String, String]]("tags")
         .valueName("k1=v1,k2=v2...")

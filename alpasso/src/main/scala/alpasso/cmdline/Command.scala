@@ -65,8 +65,10 @@ object Command:
           case SecretFilter.All   => true
 
       val buildTree = for
+        home    <- ls.repoDir().liftTo[Err]
+        _       <- GitRepo.openExists(home).use(_.verify).liftTo[Err]
         rawTree <- ls.walkTree.liftTo[Err]
-        tree <- rawTree.traverse:
+        tree    <- rawTree.traverse:
                   case Branch.Empty(dir) => EitherT.pure(Branch.Empty(dir))
                   case Branch.Solid(dir, s) =>
                     ls.loadMeta(s.map(_.metadata)).liftTo[Err].map(m => Branch.Solid(dir, m))

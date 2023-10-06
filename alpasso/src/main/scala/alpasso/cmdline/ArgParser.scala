@@ -92,7 +92,7 @@ case class ArgParser(repoDirDefault: Path):
           case (s, a: Action.UpdateSecret) => a.copy(secret = SecretPayload.fromString(s).some)
           case (s, Action.Empty) =>
             Action.UpdateSecret(secret = SecretPayload.fromString(s).some, name = none, meta = none)
-          case (name, a)                   => a
+          case (name, a) => a
         },
       opt[Map[String, String]]("tags")
         .valueName("k1=v1,k2=v2...")

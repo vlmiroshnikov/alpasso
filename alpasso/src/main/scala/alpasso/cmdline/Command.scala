@@ -68,7 +68,7 @@ object Command:
         home    <- ls.repoDir().liftTo[Err]
         _       <- GitRepo.openExists(home).use(_.verify).liftTo[Err]
         rawTree <- ls.walkTree.liftTo[Err]
-        tree    <- rawTree.traverse:
+        tree <- rawTree.traverse:
                   case Branch.Empty(dir) => EitherT.pure(Branch.Empty(dir))
                   case Branch.Solid(dir, s) =>
                     ls.loadMeta(s.map(_.metadata)).liftTo[Err].map(m => Branch.Solid(dir, m))
@@ -81,13 +81,10 @@ object Command:
       def addNewSecret(git: GitRepo[F], secret: Secret[RawSecretData]) = // todo use saga
         val commitMsg = s"Create secret ${name} at ${sys.env.getOrElse("HOST_NAME", "")}"
         for
-          file <- ls.create(secret.name, secret.payload, meta).liftTo[Err]
-          _ <- git
-                 .commitFiles(NonEmptyList.of(file.payload.secretData, file.payload.metadata),
-                              commitMsg
-                 )
-                 .liftTo[Err]
-        yield SecretView(file.name, MetadataView(meta))
+          locations <- ls.create(secret.name, secret.payload, meta).liftTo[Err]
+          files = NonEmptyList.of(locations.payload.secretData, locations.payload.metadata)
+          _ <- git.commitFiles(files, commitMsg).liftTo[Err]
+        yield SecretView(locations.name, MetadataView(meta))
 
       val result =
         for
@@ -107,13 +104,10 @@ object Command:
           secret: Secret[(RawSecretData, Metadata)]) = // todo use saga
         val commitMsg = s"Update secret ${name} at ${sys.env.getOrElse("HOST_NAME", "")}"
         for
-          file <- ls.update(secret.name, secret.payload._1, secret.payload._2).liftTo[Err]
-          _ <- git
-                 .commitFiles(NonEmptyList.of(file.payload.secretData, file.payload.metadata),
-                              commitMsg
-                 )
-                 .liftTo[Err]
-          updated <- ls.loadMeta(file.map(_.metadata)).liftTo[Err]
+          locations <- ls.update(secret.name, secret.payload._1, secret.payload._2).liftTo[Err]
+          files = NonEmptyList.of(locations.payload.secretData, locations.payload.metadata)
+          _ <- git.commitFiles(files, commitMsg).liftTo[Err]
+          updated <- ls.loadMeta(locations.map(_.metadata)).liftTo[Err]
         yield SecretView(updated.name, MetadataView(updated.payload))
 
       val result =

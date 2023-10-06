@@ -2,13 +2,12 @@ package alpasso.cmdline
 
 import java.nio.file.Path
 
-import scala.util.matching.Regex
-
 import cats.*
 import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
-import alpasso.cmdline.model.*
+
+import alpasso.cmdline.view.*
 import alpasso.common.syntax.*
 import alpasso.core.model.*
 import alpasso.service.fs.*
@@ -22,6 +21,7 @@ enum Err:
   case StorageNotInitialized(path: Path)
   case InconsistentStorage(reason: String)
   case StorageCorrupted(path: Path)
+  case SecretNotFound(name: SecretName)
   case InternalErr
 
 object Err:
@@ -40,12 +40,12 @@ object Err:
       case StorageErr.FileNotFound(path, name) => Err.InconsistentStorage(s"file not found ${path}")
       case StorageErr.DirAlreadyExists(_, name)      => Err.AlreadyExists(name)
       case StorageErr.MetadataFileCorrupted(path, _) => Err.StorageCorrupted(path)
-
-case class ErrorView(code: String, explain: Option[String])
+end Err
 
 trait Command[F[_]]:
   def initWithPath(repoDir: Path): F[RejectionOr[StorageView]]
-  def create(name: String, payload: SecretPayload, meta: Metadata): F[RejectionOr[SecretView]]
+  def create(name: SecretName, payload: SecretPayload, meta: Metadata): F[RejectionOr[SecretView]]
+  def update(name: SecretName, payload: Option[SecretPayload], meta: Option[Metadata]): F[RejectionOr[SecretView]]
   def filter(filter: SecretFilter): F[RejectionOr[Option[Node[Branch[SecretView]]]]]
 
 object Command:
@@ -54,7 +54,7 @@ object Command:
   private class Impl[F[_]: Async](ls: LocalStorage[F]) extends Command[F]:
 
     override def initWithPath(repoDir: Path): F[RejectionOr[StorageView]] =
-      GitRepo.create(repoDir).use(r => r.info.map(StorageView(_).asRight))
+      GitRepo.createNew(repoDir).use(r => r.info.map(StorageView(_).asRight))
 
     override def filter(filter: SecretFilter): F[RejectionOr[Option[Node[Branch[SecretView]]]]] =
       def predicate(s: Secret[Metadata]): Boolean =
@@ -65,37 +65,73 @@ object Command:
           case SecretFilter.All   => true
 
       val buildTree = for
-        tree <- ls.walkTree.liftTo[Err]
-        treeView <- tree.traverse:
-                      case Branch.Empty(dir) => EitherT.pure(Branch.Empty(dir))
-                      case Branch.Solid(dir, s) =>
-                        ls.loadMeta(s)
-                          .liftTo[Err]
-                          .map(m => Branch.Solid(dir, m))
-      yield cutTree[Secret[Metadata]](treeView, predicate)
+        home    <- ls.repoDir().liftTo[Err]
+        _       <- GitRepo.openExists(home).use(_.verify).liftTo[Err]
+        rawTree <- ls.walkTree.liftTo[Err]
+        tree <- rawTree.traverse:
+                  case Branch.Empty(dir) => EitherT.pure(Branch.Empty(dir))
+                  case Branch.Solid(dir, s) =>
+                    ls.loadMeta(s.map(_.metadata)).liftTo[Err].map(m => Branch.Solid(dir, m))
+      yield cutTree[Secret[Metadata]](tree, predicate)
         .map(_.traverse(b => Id(b.map(sm => SecretView(sm.name, MetadataView(sm.payload))))))
 
       buildTree.value
 
-    override def create(name: String, payload: SecretPayload, meta: Metadata): F[RejectionOr[SecretView]] =
-
-      def addNewSecret(git: GitRepo[F], secret: Secret[SecretPayload]) = // todo use saga
-        val commitMsg = s"Create secret ${name} at ${sys.env.getOrElse("HOST", "")}"
+    override def create(name: SecretName, payload: SecretPayload, meta: Metadata): F[RejectionOr[SecretView]] =
+      def addNewSecret(git: GitRepo[F], secret: Secret[RawSecretData]) = // todo use saga
+        val commitMsg = s"Create secret ${name} at ${sys.env.getOrElse("HOST_NAME", "")}"
         for
-          _    <- git.verify().liftTo[Err]
-          file <- ls.createFiles(secret.map(ps => (Payload.from(ps.rawData), meta))).liftTo[Err]
-          _ <- git
-                 .addFiles(NonEmptyList.of(file.payload.secret, file.payload.meta), commitMsg)
-                 .liftTo[Err]
-        yield SecretView(file.name, MetadataView(meta))
+          locations <- ls.create(secret.name, secret.payload, meta).liftTo[Err]
+          files = NonEmptyList.of(locations.payload.secretData, locations.payload.metadata)
+          _ <- git.commitFiles(files, commitMsg).liftTo[Err]
+        yield SecretView(locations.name, MetadataView(meta))
 
       val result =
         for
           home <- ls.repoDir().liftTo[Err]
-          secret = Secret(SecretName.of(name), payload)
+          secret = Secret(name, RawSecretData.from(payload.rawData))
           r <- GitRepo.openExists(home).use(addNewSecret(_, secret).value).liftTo[Err]
         yield r
 
       result.value
 
+    override def update(
+        name: SecretName,
+        payload: Option[SecretPayload],
+        meta: Option[Metadata]): F[RejectionOr[SecretView]] =
+      def updateExists(
+          git: GitRepo[F],
+          secret: Secret[(RawSecretData, Metadata)]) = // todo use saga
+        val commitMsg = s"Update secret ${name} at ${sys.env.getOrElse("HOST_NAME", "")}"
+        for
+          locations <- ls.update(secret.name, secret.payload._1, secret.payload._2).liftTo[Err]
+          files = NonEmptyList.of(locations.payload.secretData, locations.payload.metadata)
+          _ <- git.commitFiles(files, commitMsg).liftTo[Err]
+          updated <- ls.loadMeta(locations.map(_.metadata)).liftTo[Err]
+        yield SecretView(updated.name, MetadataView(updated.payload))
+
+      val result =
+        for
+          home    <- ls.repoDir().liftTo[Err]
+          catalog <- ls.walkTree.liftTo[Err]
+          exists <- catalog
+                      .find(_.fold(false, _.name == name))
+                      .flatMap(_.toOption)
+                      .toRight(Err.SecretNotFound(name))
+                      .toEitherT
+
+          toUpdate <-
+            (ls.loadPayload(exists.map(_.secretData)).liftTo[Err],
+             ls.loadMeta(exists.map(_.metadata)).liftTo[Err]
+            )
+              .mapN((rawSecret, rawMeta) =>
+                (payload.map(p => RawSecretData.from(p.rawData)).getOrElse(rawSecret.payload),
+                 meta.getOrElse(rawMeta.payload)
+                )
+              )
+          r <-
+            GitRepo.openExists(home).use(updateExists(_, Secret(name, toUpdate)).value).liftTo[Err]
+        yield r
+
+      result.value
 end Command

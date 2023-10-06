@@ -11,6 +11,7 @@ import cats.*
 import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
+
 import alpasso.core.model.*
 import alpasso.service.fs.model.*
 
@@ -22,38 +23,13 @@ trait StorageCtx:
 
 trait LocalStorage[F[_]]:
   def repoDir(): F[StorageResult[Path]]
-  def createFiles(secret: Secret[(Payload, Metadata)]): F[StorageResult[Secret[RawStoreEntry]]]
-  def loadMeta(secret: Secret[RawStoreEntry]): F[StorageResult[Secret[Metadata]]]
-  def walkTree: F[StorageResult[Node[Branch[Secret[RawStoreEntry]]]]]
+  def create(name: SecretName, payload: RawSecretData, meta: Metadata): F[StorageResult[Secret[RawStoreLocations]]]
+  def update(name: SecretName, payload: RawSecretData, meta: Metadata): F[StorageResult[Secret[RawStoreLocations]]]
 
-enum Branch[+A]:
-  case Empty(path: Path)
-  case Solid(path: Path, data: A)
+  def loadPayload(secret: Secret[Path]): F[StorageResult[Secret[RawSecretData]]]
+  def loadMeta(secret: Secret[Path]): F[StorageResult[Secret[Metadata]]]
 
-object Branch:
-
-  extension [A](b: Branch[A])
-
-    def toEmpty: Branch[A] =
-      b match
-        case a @ Empty(_)   => a
-        case Solid(path, _) => Empty(path)
-
-    def fold[B](empty: => B, solid: A => B): B =
-      b match
-        case Branch.Empty(_)       => empty
-        case Branch.Solid(_, data) => solid(data)
-
-  given [A: Show]: Show[Branch[A]] = Show.show:
-    case Branch.Empty(path)       => path.getFileName.toString
-    case Branch.Solid(path, data) => data.show
-
-  given Functor[Branch] = new Functor[Branch]:
-
-    override def map[A, B](fa: Branch[A])(f: A => B): Branch[B] =
-      fa match
-        case Empty(dir)        => Branch.Empty(dir)
-        case Solid(path, data) => Branch.Solid(path, f(data))
+  def walkTree: F[StorageResult[Node[Branch[Secret[RawStoreLocations]]]]]
 
 object LocalStorage:
 
@@ -71,17 +47,18 @@ object LocalStorage:
       extends LocalStorage[F]:
 
     import F.blocking
+    import StandardOpenOption.*
 
     override def repoDir(): F[StorageResult[Path]] = ctx.repoDir.asRight.pure
 
-    override def walkTree: F[StorageResult[Node[Branch[Secret[RawStoreEntry]]]]] =
-      def mapBranch: Entry => Branch[Secret[RawStoreEntry]] =
+    override def walkTree: F[StorageResult[Node[Branch[Secret[RawStoreLocations]]]]] =
+      def mapBranch: Entry => Branch[Secret[RawStoreLocations]] =
         case Entry(dir, Chain.nil) => Branch.Empty(dir)
         case Entry(dir, files) =>
           (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
             case (Some(meta), Some(payload)) =>
               val name = SecretName.of(ctx.repoDir.relativize(dir).toString)
-              Branch.Solid(dir, Secret(name, RawStoreEntry(payload, meta)))
+              Branch.Solid(dir, Secret(name, RawStoreLocations(payload, meta)))
             case _ => Branch.Empty(dir)
 
       for
@@ -89,8 +66,8 @@ object LocalStorage:
         tr = tree.traverse(v => Id(mapBranch(v)))
       yield tr.asRight
 
-    override def loadMeta(secret: Secret[RawStoreEntry]): F[StorageResult[Secret[Metadata]]] =
-      val metaPath = secret.payload.meta
+    override def loadMeta(secret: Secret[Path]): F[StorageResult[Secret[Metadata]]] =
+      val metaPath = secret.payload
 
       blocking(Files.exists(metaPath)).flatMap { exists =>
         if !exists then
@@ -102,38 +79,52 @@ object LocalStorage:
             .bimap(_ => StorageErr.MetadataFileCorrupted(metaPath, secret.name),
                    Secret(secret.name, _)
             )
-
       }
 
-    override def createFiles(secret: Secret[(Payload, Metadata)]): F[StorageResult[Secret[RawStoreEntry]]] =
-      val path = ctx.resolve(secret.name)
+    override def loadPayload(secret: Secret[Path]): F[StorageResult[Secret[RawSecretData]]] =
+      val path = secret.payload
 
-      val payload  = secret.payload._1
-      val metadata = secret.payload._2
+      blocking(Files.exists(path)).flatMap { exists =>
+        if !exists then
+          StorageErr.FileNotFound(path, secret.name).asLeft[Secret[RawSecretData]].pure[F]
+        else
+          for raw <- blocking(Files.readAllBytes(path))
+          yield Secret(secret.name, RawSecretData.from(raw)).asRight
+      }
+
+    override def create(name: SecretName, payload: RawSecretData, meta: Metadata): F[StorageResult[Secret[RawStoreLocations]]] =
+      val path = ctx.resolve(name)
+
+      val metaPath    = path.resolve("meta")
+      val payloadPath = path.resolve("payload")
+
+      blocking(Files.exists(path) && Files.exists(payloadPath)).flatMap { rootExists =>
+        if rootExists then StorageErr.DirAlreadyExists(path, name).asLeft.pure[F]
+        else
+          for
+            _ <- blocking(Files.createDirectories(path))
+            _ <- blocking(
+                   Files.write(payloadPath, payload.byteArray, CREATE_NEW, WRITE)
+                 )
+            _ <- blocking(
+                   Files.writeString(metaPath, meta.rawString, CREATE_NEW, WRITE)
+                 )
+          yield Secret(name, RawStoreLocations(payloadPath, metaPath)).asRight
+      }
+
+    override def update(name: SecretName, payload: RawSecretData, metadata: Metadata): F[StorageResult[Secret[RawStoreLocations]]] =
+      val path = ctx.resolve(name)
 
       val metaPath    = path.resolve("meta")
       val payloadPath = path.resolve("payload")
 
       blocking(Files.exists(path) && Files.exists(metaPath)).flatMap { exists =>
-        if exists then StorageErr.DirAlreadyExists(metaPath, secret.name).asLeft.pure[F]
+        if !exists then StorageErr.FileNotFound(metaPath, name).asLeft.pure[F]
         else
           for
-            _ <- blocking(Files.createDirectories(path))
-            _ <- blocking(
-                   Files.write(payloadPath,
-                               payload.byteArray,
-                               StandardOpenOption.CREATE_NEW,
-                               StandardOpenOption.WRITE
-                   )
-                 )
-            _ <- blocking(
-                   Files.writeString(metaPath,
-                                     metadata.rawString,
-                                     StandardOpenOption.CREATE_NEW,
-                                     StandardOpenOption.WRITE
-                   )
-                 )
-          yield Secret(secret.name, RawStoreEntry(payloadPath, metaPath)).asRight
+            _ <- blocking(Files.write(payloadPath, payload.byteArray, StandardOpenOption.WRITE))
+            _ <- blocking(Files.writeString(metaPath, metadata.rawString, CREATE, WRITE))
+          yield Secret(name, RawStoreLocations(payloadPath, metaPath)).asRight
       }
 end LocalStorage
 
@@ -190,13 +181,13 @@ def cutTree[A](root: Node[Branch[A]], f: A => Boolean): Option[Node[Branch[A]]] 
 
   filter_(marked)
 
-def mapBranch: Entry => Branch[Secret[RawStoreEntry]] =
+def mapBranch: Entry => Branch[Secret[RawStoreLocations]] =
   case Entry(dir, Chain.nil) => Branch.Empty(dir)
   case Entry(dir, files) =>
     (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
       case (Some(meta), Some(payload)) =>
         Branch
-          .Solid(dir, Secret(SecretName.of(dir.toString), RawStoreEntry(payload, meta)))
+          .Solid(dir, Secret(SecretName.of(dir.toString), RawStoreLocations(payload, meta)))
       case _ => Branch.Empty(dir)
 
 @main
@@ -204,9 +195,9 @@ def main(): Unit =
   given Show[Entry] = Show.show(e => s"path = ${e.path}  [${e.files.toList.mkString(", ")}]")
 
   val tree = walkFileTree(Paths.get("", ".tmps"), _.endsWith(".git"))
-  val bree: Node[Branch[Secret[RawStoreEntry]]] = tree.traverse(a => Id(mapBranch(a)))
+  val bree: Node[Branch[Secret[RawStoreLocations]]] = tree.traverse(a => Id(mapBranch(a)))
 
-  val res: Option[Node[Branch[Secret[RawStoreEntry]]]] = cutTree(bree, _ => true)
+  val res: Option[Node[Branch[Secret[RawStoreLocations]]]] = cutTree(bree, _ => true)
 
   given [A]: Show[Secret[A]] = Show.show(s => s"${s.name}")
 

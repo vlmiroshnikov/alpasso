@@ -23,8 +23,8 @@ enum GitError extends Throwable with NoStackTrace:
 
 trait GitRepo[F[_]]:
   def info: F[Path]
-  def verify(): F[Either[GitError, Unit]]
-  def addFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]]
+  def verify: F[Either[GitError, Unit]]
+  def commitFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]]
 
 object GitRepo:
 
@@ -51,9 +51,10 @@ object GitRepo:
 
     Resource
       .fromAutoCloseable(repoF)
+      .flatTap(repo => Resource.eval(verify_(repo).rethrow))
       .map(Impl(_))
 
-  def create[F[_]: Sync](repoDir: Path): Resource[F, GitRepo[F]] = Resource
+  def createNew[F[_]: Sync](repoDir: Path): Resource[F, GitRepo[F]] = Resource
     .fromAutoCloseable(Sync[F].blocking {
       val home       = Files.createDirectory(repoDir)
       val repository = FileRepositoryBuilder.create(home.resolve(".git").toFile)
@@ -61,6 +62,11 @@ object GitRepo:
       repository
     })
     .map(Impl(_))
+
+  private def verify_[F[_]: Sync](repository: Repository): F[Either[GitError, Unit]] =
+    Sync[F].blocking:
+      val status = Git.wrap(repository).status().call()
+      Either.cond(status.isClean, (), GitError.RepositoryIsDirty)
 
   class Impl[F[_]](
       using
@@ -73,12 +79,10 @@ object GitRepo:
 
     override def info: F[Path] = blocking(repository.getWorkTree.toPath)
 
-    override def verify(): F[Either[GitError, Unit]] =
-      blocking:
-        val status = Git.wrap(repository).status().call()
-        Either.cond(status.isClean, (), GitError.RepositoryIsDirty)
+    override def verify: F[Either[GitError, Unit]] =
+      verify_(repository)
 
-    override def addFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]] =
+    override def commitFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]] =
       blocking:
         val git        = new Git(repository)
         val addCommand = git.add()

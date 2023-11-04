@@ -19,7 +19,7 @@ object Settings {
 object Deps {
   lazy val cats       = Seq("org.typelevel" %% "cats-core").map(_ % Versions.cats)
   lazy val catsEffect = Seq("org.typelevel" %% "cats-effect").map(_ % Versions.catsEffect)
-  lazy val bouncy     = Seq("org.bouncycastle" % "bcprov-jdk18on" % "1.76")
+  lazy val bouncy     = Seq("org.bouncycastle" % "bcprov-jdk18on", "org.bouncycastle" % "bcpg-jdk18on").map(_  % "1.76")
   lazy val jgit       = Seq("org.eclipse.jgit" % "org.eclipse.jgit" % "6.6.1.202309021850-r")
   lazy val fs2        = Seq("co.fs2" %% "fs2-core" % "3.9.0", "co.fs2" %% "fs2-io" % "3.9.0")
   lazy val scopt      = Seq("com.github.scopt" %% "scopt" % "4.1.0")

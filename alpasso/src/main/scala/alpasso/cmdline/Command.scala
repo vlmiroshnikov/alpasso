@@ -36,9 +36,9 @@ object Err:
 
   private def fromStorageErr(se: StorageErr): Err =
     se match
-      case StorageErr.NotInitialized           => Err.InternalErr
-      case StorageErr.FileNotFound(path, name) => Err.InconsistentStorage(s"file not found ${path}")
-      case StorageErr.DirAlreadyExists(_, name)      => Err.AlreadyExists(name)
+      case StorageErr.NotInitialized            => Err.InternalErr
+      case StorageErr.FileNotFound(path, name)  => Err.InconsistentStorage(s"file not found $path")
+      case StorageErr.DirAlreadyExists(_, name) => Err.AlreadyExists(name)
       case StorageErr.MetadataFileCorrupted(path, _) => Err.StorageCorrupted(path)
 end Err
 
@@ -79,7 +79,7 @@ object Command:
 
     override def create(name: SecretName, payload: SecretPayload, meta: Metadata): F[RejectionOr[SecretView]] =
       def addNewSecret(git: GitRepo[F], secret: Secret[RawSecretData]) = // todo use saga
-        val commitMsg = s"Create secret ${name} at ${sys.env.getOrElse("HOST_NAME", "")}"
+        val commitMsg = s"Create secret $name at ${sys.env.getOrElse("HOST_NAME", "")}"
         for
           locations <- ls.create(secret.name, secret.payload, meta).liftTo[Err]
           files = NonEmptyList.of(locations.payload.secretData, locations.payload.metadata)
@@ -102,7 +102,7 @@ object Command:
       def updateExists(
           git: GitRepo[F],
           secret: Secret[(RawSecretData, Metadata)]) = // todo use saga
-        val commitMsg = s"Update secret ${name} at ${sys.env.getOrElse("HOST_NAME", "")}"
+        val commitMsg = s"Update secret $name at ${sys.env.getOrElse("HOST_NAME", "")}"
         for
           locations <- ls.update(secret.name, secret.payload._1, secret.payload._2).liftTo[Err]
           files = NonEmptyList.of(locations.payload.secretData, locations.payload.metadata)

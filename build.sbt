@@ -13,7 +13,7 @@ lazy val alpasso = project
   .dependsOn(core)
   .settings(Settings.common)
   .settings(
-    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.scopt ++ Deps.jgit ++ Deps.glass ++ Deps.circe
+    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.scopt ++ Deps.jgit ++ Deps.glass ++ Deps.circe ++ Deps.bouncy
   )
 
 lazy val root = project

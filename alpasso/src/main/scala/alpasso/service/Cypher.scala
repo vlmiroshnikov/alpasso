@@ -24,6 +24,7 @@ import org.bouncycastle.openpgp.bc.*
 import org.bouncycastle.openpgp.operator.bc.*
 import org.bouncycastle.openpgp.operator.jcajce.*
 import org.bouncycastle.util.encoders.Hex
+import alpasso.internal.SecretKeys
 
 enum CryptoErr:
   case Empty
@@ -34,16 +35,16 @@ object BCBuilder:
 
   def findSecretKey[F[_]: Sync](secretDirPath: Path, publicKey: PGPPublicKey, pass: String): F[List[PGPSecretKey]] =
     val calculatorProvider = new JcaPGPDigestCalculatorProviderBuilder().build()
-    val passphraseProvider = new JcePBEProtectionRemoverFactory(pass.toCharArray)
-    val sparser            = new SExprParser(calculatorProvider)
+    val passSupplier       = new SecretKeys.PassphraseSupplier:
+      override def getPassphrase: Array[Char] = pass.toCharArray
 
     def tryParser(keyFile: Path) =
       Resource
         .fromAutoCloseable(Sync[F].blocking(Files.newInputStream(keyFile)))
         .use { is =>
           for
-            key <- Sync[F].blocking(sparser.parseSecretKey(is, passphraseProvider, publicKey))
-            _ <- Sync[F].raiseWhen(!key.isSigningKey)(
+            key <- Sync[F].blocking(SecretKeys.readSecretKey(is, calculatorProvider, passSupplier, publicKey))
+            _   <- Sync[F].raiseWhen(!key.isSigningKey)(
                    new PGPException(s"GPGSecretKey is not a SigningKey: ${key}")
                  )
           yield key
@@ -56,7 +57,7 @@ object BCBuilder:
       .asScala
       .toList
       .filter(Files.isRegularFile(_))
-      .traverseEither(tryParser)((key, e) => Sync[F].delay(println(s" ${key}  ${e}")))
+      .traverseEither(tryParser)((key, e) => Sync[F].delay(e.printStackTrace()))
 
   def loadPublicKey[F[_]: Sync](kbxPath: Path): Resource[F, KeyBox] =
     Resource

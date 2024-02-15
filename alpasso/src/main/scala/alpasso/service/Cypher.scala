@@ -20,7 +20,6 @@ import org.bouncycastle.openpgp.bc.*
 import org.bouncycastle.openpgp.operator.bc.*
 import org.bouncycastle.openpgp.operator.jcajce.*
 import org.bouncycastle.util.encoders.Hex
-import alpasso.internal.SecretKeys
 import org.bouncycastle.bcpg.{ArmoredOutputStream, CompressionAlgorithmTags, SecretKeyPacket, SymmetricKeyAlgorithmTags}
 import org.bouncycastle.openpgp.jcajce.JcaPGPObjectFactory
 import org.bouncycastle.openpgp.operator.{PBESecretKeyDecryptor, PGPDataEncryptorBuilder}

@@ -8,12 +8,25 @@ lazy val core = project
     libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.bouncy ++ Deps.fs2
   )
 
-lazy val alpasso = project
-  .in(file("alpasso"))
+lazy val cypherd = project
+  .in(file("cypherd"))
   .dependsOn(core)
   .settings(Settings.common)
   .settings(
-    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.scopt ++ Deps.jgit ++ Deps.glass ++ Deps.circe ++ Deps.bouncy
+    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.glass ++ Deps.circe ++ Deps.bouncy ++ Deps.tapir ++ Deps.blaze
+  )
+
+lazy val alpasso = project
+  .in(file("alpasso"))
+  .enablePlugins(JavaAppPackaging)
+  .settings(
+    Compile / mainClass := Some("alpasso.cli.CliApp"),
+    Compile / discoveredMainClasses  := Seq()
+  )
+  .dependsOn(core, cypherd)
+  .settings(Settings.common)
+  .settings(
+    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.scopt ++ Deps.jgit ++ Deps.glass ++ Deps.circe ++ Deps.bouncy ++ Deps.logstage
   )
 
 lazy val root = project

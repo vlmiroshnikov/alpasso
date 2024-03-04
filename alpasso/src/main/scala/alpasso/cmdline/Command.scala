@@ -10,6 +10,7 @@ import cats.syntax.all.*
 import alpasso.cmdline.view.*
 import alpasso.common.syntax.*
 import alpasso.core.model.*
+import alpasso.service.cypher.*
 import alpasso.service.fs.*
 import alpasso.service.fs.model.*
 import alpasso.service.git.*
@@ -22,11 +23,13 @@ enum Err:
   case InconsistentStorage(reason: String)
   case StorageCorrupted(path: Path)
   case SecretNotFound(name: SecretName)
+  case CypherErr
   case InternalErr
 
 object Err:
   given Upcast[Err, GitError]   = fromGitError(_)
   given Upcast[Err, StorageErr] = fromStorageErr(_)
+  given Upcast[Err, Unit]       = _ => Err.CypherErr
 
   private def fromGitError(ge: GitError): Err =
     ge match
@@ -89,7 +92,13 @@ object Command:
       val result =
         for
           home <- ls.repoDir().liftTo[Err]
-          secret = Secret(name, RawSecretData.from(payload.rawData))
+          gpg <- CypherService
+                   .makeGpgCypher[F]("C7FE51E3A3790ABE0D9FD172DA874AB03CF06294",
+                                     () => Sync[F].pure("$!lentium")
+                   )
+                   .liftTo[Err]
+          data <- gpg.encrypt(payload.rawData).liftTo[Err]
+          secret = Secret(name, RawSecretData.from(data))
           r <- GitRepo.openExists(home).use(addNewSecret(_, secret).value).liftTo[Err]
         yield r
 

@@ -39,6 +39,8 @@ enum Action:
   case FindSecrets(
       filter: Option[SecretFilter] = None,
       outputFormat: OutputFormat = OutputFormat.Tree)
+
+  case Daemon(port: Int)
   case Empty
 
 case class ArgParser(repoDirDefault: Path):
@@ -139,11 +141,14 @@ case class ArgParser(repoDirDefault: Path):
         }
     )
 
+  private val daemon = cmd("daemon").action( (_, _) => Action.Daemon(8080))
+
   def parser: OParser[Unit, Action] =
     OParser.sequence(
       programName("alpasso"),
       help("help"),
       init,
+      daemon,
       create,
       update,
       find

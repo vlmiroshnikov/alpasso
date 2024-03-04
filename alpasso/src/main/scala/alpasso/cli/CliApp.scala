@@ -12,19 +12,27 @@ import alpasso.cmdline.view.*
 import alpasso.common.syntax.*
 import alpasso.core.model.*
 import alpasso.core.model.given
+import alpasso.runDaemon
 import alpasso.service.fs.*
 import alpasso.service.fs.model.*
 
 import scopt.{ OParser, RenderingMode }
+import logstage.{IzLogger, LogIO}
 
 object CliApp extends IOApp:
 
-  val repoDirDefault = Paths.get("", ".tmps").toAbsolutePath
+  //val repoDirDefault = Paths.get("", ".tmps").toAbsolutePath
+  val repoDirDefault: Path = Paths.get("/home/vmiroshnikov/workspace/alpasso/.tmps").toAbsolutePath
+
 
   override def run(args: List[String]): IO[ExitCode] =
+
+    val logger = IzLogger()
     val ls = LocalStorage.make[IO](repoDirDefault.toString)
 
     val cmd = Command.make[IO](ls)
+    
+    given LogIO[IO] = LogIO.fromLogger(logger)
 
     given [A: Show]: Show[Option[A]] =
       Show.show[Option[A]](_.fold("empty")(_.show))
@@ -60,6 +68,7 @@ object CliApp extends IOApp:
               .value
             handle(r1)
 
+      case Some(Action.Daemon(_)) => runDaemon
       case v =>
         IO.println(v.toString) *> IO.println(OParser.usage(parser, RenderingMode.TwoColumns))
 

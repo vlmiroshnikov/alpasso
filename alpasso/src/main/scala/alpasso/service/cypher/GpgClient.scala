@@ -1,14 +1,19 @@
 package alpasso.service.cypher
 
 import java.time.OffsetDateTime
+import java.util.Base64
+
 import scala.concurrent.duration.*
 import scala.sys.process.*
+
 import cats.*
 import cats.data.EitherT
 import cats.effect.*
 import cats.syntax.all.*
+
 import alpasso.Endpoints
-import alpasso.model.{EncryptRequest, GetSessionRequest}
+import alpasso.model.{ EncryptRequest, GetSessionRequest }
+
 import izumi.logstage.api.IzLogger
 import logstage.LogIO
 import logstage.LogIO.log
@@ -16,8 +21,6 @@ import sttp.client3.UriContext
 import sttp.client3.logging.LoggingBackend
 import sttp.model.Uri
 import sttp.tapir.client.sttp.SttpClientInterpreter
-
-import java.util.Base64
 
 type Logger[F[_]] = LogIO[F]
 
@@ -34,12 +37,13 @@ trait GpgClient[F[_]]:
   def encrypt(id: String, raw: Array[Byte]): F[Either[Unit, Array[Byte]]]
 
 object GpgClient:
-  private val url: Uri = uri"http://127.0.0.1:8080/api/v1/"
+  private val url: Uri    = uri"http://127.0.0.1:8080/api/v1/"
   private val interpreter = SttpClientInterpreter()
 
-  def make[F[_]: Sync : Logger](): GpgClient[F] = new Impl[F]
+  def make[F[_]: Sync: Logger](): GpgClient[F] = new Impl[F]
 
-  private class Impl[F[_]: Sync : Logger] extends GpgClient[F]:
+  private class Impl[F[_]: Sync: Logger] extends GpgClient[F]:
+
     override def healthCheck(): ResultF[F, Unit] =
       val client = interpreter.toQuickClient(Endpoints.check, Some(url))
       Sync[F].blocking(client(()).bimap(se => (), r => ())).recover(e => ().asLeft)
@@ -62,15 +66,11 @@ object GpgClient:
         .bimap(se => (), r => Base64.getDecoder.decode(r.base64Payload))
         .pure[F]
 
-
 @main
 def main =
   given Logger[IO] = LogIO.fromLogger(IzLogger())
-  val res = CypherService.makeGpgCypher[IO]("C7FE51E3A3790ABE0D9FD172DA874AB03CF06294",
-    () => IO.pure("$!lentium")
-  )
-
-
+  val res = CypherService
+    .makeGpgCypher[IO]("C7FE51E3A3790ABE0D9FD172DA874AB03CF06294", () => IO.pure("$!lentium"))
 
 trait CypherService[F[_]]:
   def encrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]]
@@ -79,6 +79,7 @@ trait CypherService[F[_]]:
 object CypherService:
 
   private class GpgImpl[F[_]](client: GpgClient[F], fg: String) extends CypherService[F]:
+
     override def encrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] =
       client.encrypt(fg, raw)
 
@@ -88,7 +89,7 @@ object CypherService:
     override def encrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] = raw.asRight.pure
     override def decrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] = raw.asRight.pure
 
-  def makeGpgCypher[F[_]: Async : Logger](fg: String, enterPass: () => F[String]): F[Either[Unit, CypherService[F]]] =
+  def makeGpgCypher[F[_]: Async: Logger](fg: String, enterPass: () => F[String]): F[Either[Unit, CypherService[F]]] =
     val client = GpgClient.make[F]()
 
     def fork =
@@ -98,7 +99,6 @@ object CypherService:
           Sync[F].blocking(
             Process("/home/vmiroshnikov/workspace/alpasso/alpasso/target/universal/stage/bin/alpasso daemon")
               .run(BasicIO(false, ProcessLogger(_ => ())).daemonized())
-
           )
         _ <- log.info("try sleep")
         _ <- Temporal[F].sleep(3.seconds)

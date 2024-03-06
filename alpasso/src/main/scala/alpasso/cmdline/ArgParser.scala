@@ -141,7 +141,7 @@ case class ArgParser(repoDirDefault: Path):
         }
     )
 
-  private val daemon = cmd("daemon").action( (_, _) => Action.Daemon(8080))
+  private val daemon = cmd("daemon").action((_, _) => Action.Daemon(8080))
 
   def parser: OParser[Unit, Action] =
     OParser.sequence(

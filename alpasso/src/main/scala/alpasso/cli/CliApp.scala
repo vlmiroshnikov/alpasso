@@ -1,10 +1,12 @@
 package alpasso.cli
 
 import java.nio.file.*
+
 import cats.*
 import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
+
 import alpasso.cmdline.*
 import alpasso.cmdline.view.*
 import alpasso.common.syntax.*
@@ -13,18 +15,18 @@ import alpasso.core.model.given
 import alpasso.runDaemon
 import alpasso.service.fs.*
 import alpasso.service.fs.model.*
-import scopt.{OParser, RenderingMode}
-import logstage.{IzLogger, LogIO, StaticLogRouter}
+
+import logstage.{ IzLogger, LogIO, StaticLogRouter }
+import scopt.{ OParser, RenderingMode }
 
 object CliApp extends IOApp:
 
-  //val repoDirDefault = Paths.get("", ".tmps").toAbsolutePath
+  // val repoDirDefault = Paths.get("", ".tmps").toAbsolutePath
   val repoDirDefault: Path = Paths.get("/home/vmiroshnikov/workspace/alpasso/.tmps").toAbsolutePath
-
 
   override def run(args: List[String]): IO[ExitCode] =
 
-    val logger = IzLogger()
+    val logger      = IzLogger()
     given LogIO[IO] = LogIO.fromLogger(logger)
     StaticLogRouter.instance.setup(logger.router)
 

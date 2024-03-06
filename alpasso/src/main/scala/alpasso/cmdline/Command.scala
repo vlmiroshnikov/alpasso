@@ -52,9 +52,9 @@ trait Command[F[_]]:
   def filter(filter: SecretFilter): F[RejectionOr[Option[Node[Branch[SecretView]]]]]
 
 object Command:
-  def make[F[_]: Async](ls: LocalStorage[F]): Command[F] = Impl[F](ls)
+  def make[F[_]: Async : Logger](ls: LocalStorage[F]): Command[F] = Impl[F](ls)
 
-  private class Impl[F[_]: Async](ls: LocalStorage[F]) extends Command[F]:
+  private class Impl[F[_]: Async: Logger](ls: LocalStorage[F]) extends Command[F]:
 
     override def initWithPath(repoDir: Path): F[RejectionOr[StorageView]] =
       GitRepo.createNew(repoDir).use(r => r.info.map(StorageView(_).asRight))

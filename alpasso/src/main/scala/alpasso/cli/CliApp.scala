@@ -1,12 +1,10 @@
 package alpasso.cli
 
 import java.nio.file.*
-
 import cats.*
 import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
-
 import alpasso.cmdline.*
 import alpasso.cmdline.view.*
 import alpasso.common.syntax.*
@@ -15,9 +13,8 @@ import alpasso.core.model.given
 import alpasso.runDaemon
 import alpasso.service.fs.*
 import alpasso.service.fs.model.*
-
-import scopt.{ OParser, RenderingMode }
-import logstage.{IzLogger, LogIO}
+import scopt.{OParser, RenderingMode}
+import logstage.{IzLogger, LogIO, StaticLogRouter}
 
 object CliApp extends IOApp:
 
@@ -28,11 +25,12 @@ object CliApp extends IOApp:
   override def run(args: List[String]): IO[ExitCode] =
 
     val logger = IzLogger()
+    given LogIO[IO] = LogIO.fromLogger(logger)
+    StaticLogRouter.instance.setup(logger.router)
+
     val ls = LocalStorage.make[IO](repoDirDefault.toString)
 
     val cmd = Command.make[IO](ls)
-    
-    given LogIO[IO] = LogIO.fromLogger(logger)
 
     given [A: Show]: Show[Option[A]] =
       Show.show[Option[A]](_.fold("empty")(_.show))

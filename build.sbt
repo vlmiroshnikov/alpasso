@@ -13,7 +13,7 @@ lazy val cypherd = project
   .dependsOn(core)
   .settings(Settings.common)
   .settings(
-    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.glass ++ Deps.circe ++ Deps.bouncy ++ Deps.tapir ++ Deps.blaze
+    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.glass ++ Deps.circe ++ Deps.bouncy ++ Deps.tapir ++ Deps.blaze ++ Deps.logstage
   )
 
 lazy val alpasso = project
@@ -26,7 +26,7 @@ lazy val alpasso = project
   .dependsOn(core, cypherd)
   .settings(Settings.common)
   .settings(
-    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.scopt ++ Deps.jgit ++ Deps.glass ++ Deps.circe ++ Deps.bouncy ++ Deps.logstage
+    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.scopt ++ Deps.jgit ++ Deps.glass ++ Deps.circe ++ Deps.logstage
   )
 
 lazy val root = project

@@ -1,5 +1,6 @@
 package alpasso
 
+import java.time.OffsetDateTime
 import cats.syntax.all.*
 import cats.effect.{ExitCode, IO, IOApp}
 import sttp.tapir.*
@@ -15,7 +16,7 @@ import sttp.tapir.redoc.bundle.RedocInterpreter
 import sttp.tapir.server.ServerEndpoint
 import sttp.tapir.server.http4s.Http4sServerInterpreter
 
-import java.time.OffsetDateTime
+import logstage.*
 
 object model:
   given Configuration = Configuration.default.withSnakeCaseMemberNames
@@ -44,6 +45,16 @@ object model:
   object EncryptResponse:
     given Schema[EncryptResponse] = Schema.derived
 
+  case class DecryptRequest(keyId: String, base64Payload: String)derives ConfiguredCodec
+
+  object DecryptRequest:
+    given Schema[DecryptRequest] = Schema.derived
+
+  case class DecryptResponse(keyId: String, base64Payload: String)derives ConfiguredCodec
+
+  object DecryptResponse:
+    given Schema[DecryptResponse] = Schema.derived
+
 val contextPath: List[String] = List("api", "v1")
 val docPathPrefix: List[String] = "redoc" :: Nil
 
@@ -71,6 +82,9 @@ object Endpoints:
   val encrypt: PublicEndpoint[EncryptRequest, Unit, EncryptResponse, Any] =
     endpoint.put.in("gpg" / "encrypt").in(jsonBody[EncryptRequest]).out(jsonBody[EncryptResponse])
 
+  val decrypt: PublicEndpoint[DecryptRequest, Unit, DecryptResponse, Any] =
+    endpoint.put.in("gpg" / "encrypt").in(jsonBody[DecryptRequest]).out(jsonBody[DecryptResponse])
+
 
 object ServerRoutes:
   import Endpoints.*
@@ -78,7 +92,7 @@ object ServerRoutes:
 
   val routes: HttpRoutes[IO] =
     val redocEndpoints = RedocInterpreter(redocUIOptions = RedocUIOptions.default.contextPath(contextPath).pathPrefix(docPathPrefix))
-      .fromEndpoints[IO](List(check, getSession, createSession, encrypt), "The tapir library", "1.0.0")
+      .fromEndpoints[IO](List(check, getSession, createSession, encrypt, decrypt), "The tapir library", "1.0.0")
 
     val intpr = Http4sServerInterpreter[IO]()
 
@@ -90,23 +104,28 @@ object ServerRoutes:
       },
       getSession.serverLogicPure[IO](req => SessionError.NotFound(req.keyId).asLeft),
       createSession.serverLogicPure[IO](req => SessionDataResponse(req.keyId, OffsetDateTime.now(), OffsetDateTime.now().plusHours(1L)).asRight),
-      encrypt.serverLogicPure[IO](req => EncryptResponse(req.keyId, req.base64Payload).asRight)
+      encrypt.serverLogicPure[IO](req => EncryptResponse(req.keyId, req.base64Payload).asRight),
+      decrypt.serverLogicPure[IO](req => DecryptResponse(req.keyId, req.base64Payload).asRight),
     )
 
     intpr.toRoutes(redocEndpoints) <+> intpr.toRoutes(endpoints)
 
 
-def runDaemon: IO[Unit] =
+def runDaemon(using log: LogIO[IO]): IO[Unit] =
   val ec = scala.concurrent.ExecutionContext.global
   BlazeServerBuilder[IO]
     .withExecutionContext(ec)
     .bindHttp(8080, "localhost")
     .withHttpApp(Router(s"/${contextPath.mkString("/")}" -> ServerRoutes.routes).orNotFound)
     .resource
-    .use { _ => IO.println(s"go to: http://127.0.0.1:8080/${(contextPath ++ docPathPrefix).mkString("/")}") *> IO.never }
+    .use { _ =>
+      val path = (contextPath ++ docPathPrefix).mkString("/")
+      log.info(s"go to: http://127.0.0.1:8080/$path") *> IO.never 
+    }
 
 
 object Daemon extends IOApp:
 
   override def run(args: List[String]): IO[ExitCode] =
+    given LogIO[IO] = LogIO.fromLogger(IzLogger())
     runDaemon.as(ExitCode.Success)

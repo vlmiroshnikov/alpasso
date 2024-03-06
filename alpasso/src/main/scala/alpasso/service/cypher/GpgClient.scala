@@ -9,11 +9,17 @@ import cats.effect.*
 import cats.syntax.all.*
 import alpasso.Endpoints
 import alpasso.model.{EncryptRequest, GetSessionRequest}
+import izumi.logstage.api.IzLogger
+import logstage.LogIO
+import logstage.LogIO.log
 import sttp.client3.UriContext
+import sttp.client3.logging.LoggingBackend
 import sttp.model.Uri
 import sttp.tapir.client.sttp.SttpClientInterpreter
 
 import java.util.Base64
+
+type Logger[F[_]] = LogIO[F]
 
 opaque type Fingerprint <: String = String
 
@@ -31,14 +37,12 @@ object GpgClient:
   private val url: Uri = uri"http://127.0.0.1:8080/api/v1/"
   private val interpreter = SttpClientInterpreter()
 
-  def make[F[_]: Sync](): GpgClient[F] = new Impl[F]
+  def make[F[_]: Sync : Logger](): GpgClient[F] = new Impl[F]
 
-  private class Impl[F[_]: Sync] extends GpgClient[F]:
-
+  private class Impl[F[_]: Sync : Logger] extends GpgClient[F]:
     override def healthCheck(): ResultF[F, Unit] =
       val client = interpreter.toQuickClient(Endpoints.check, Some(url))
-      val r= client(()).bimap(se => (), r => ())
-      r.pure[F]
+      Sync[F].blocking(client(()).bimap(se => (), r => ())).recover(e => ().asLeft)
 
     override def getSession(id: String): ResultF[F, Session] =
       val client = interpreter.toQuickClient(Endpoints.getSession, Some(url))
@@ -61,6 +65,7 @@ object GpgClient:
 
 @main
 def main =
+  given Logger[IO] = LogIO.fromLogger(IzLogger())
   val res = CypherService.makeGpgCypher[IO]("C7FE51E3A3790ABE0D9FD172DA874AB03CF06294",
     () => IO.pure("$!lentium")
   )
@@ -88,14 +93,15 @@ object CypherService:
 
     def fork =
       for
-        _ <- Sync[F].delay(println("Run fork"))
+        _ <- log.info("Run fork")
         _ <-
           Sync[F].blocking(
             Process("/home/vmiroshnikov/workspace/alpasso/alpasso/target/universal/stage/bin/alpasso daemon")
-              .run()
+              .run(BasicIO(false, ProcessLogger(_ => ())).daemonized())
+
           )
-        _ <- Sync[F].delay(println("try sleep"))
-        _ <- Temporal[F].sleep(1.seconds)
+        _ <- log.info("try sleep")
+        _ <- Temporal[F].sleep(3.seconds)
       yield ()
 
     def create =

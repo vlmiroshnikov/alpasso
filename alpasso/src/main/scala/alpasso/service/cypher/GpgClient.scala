@@ -2,18 +2,14 @@ package alpasso.service.cypher
 
 import java.time.OffsetDateTime
 import java.util.Base64
-
 import scala.concurrent.duration.*
 import scala.sys.process.*
-
 import cats.*
 import cats.data.EitherT
 import cats.effect.*
 import cats.syntax.all.*
-
 import alpasso.Endpoints
-import alpasso.model.{ EncryptRequest, GetSessionRequest }
-
+import alpasso.model.{DecryptRequest, EncryptRequest, GetSessionRequest}
 import izumi.logstage.api.IzLogger
 import logstage.LogIO
 import logstage.LogIO.log
@@ -26,6 +22,24 @@ type Logger[F[_]] = LogIO[F]
 
 opaque type Fingerprint <: String = String
 
+opaque type RawData <: Array[Byte] = Array[Byte]
+
+object RawData:
+  def from(data: Array[Byte]): RawData = data
+
+  extension (x: RawData)
+    def underlying: Array[Byte] = x
+
+
+opaque type EncryptedData <: Array[Byte] = Array[Byte]
+
+object EncryptedData:
+  def from(data: Array[Byte]): EncryptedData = data
+
+  extension (x: EncryptedData)
+    def underlying: Array[Byte] = x
+
+
 type ResultF[F[_], S] = F[Either[Unit, S]]
 
 case class Session(fingerprint: String, created: OffsetDateTime, expired: OffsetDateTime)
@@ -34,7 +48,10 @@ trait GpgClient[F[_]]:
   def healthCheck(): F[Either[Unit, Unit]]
   def getSession(id: String): F[Either[Unit, Session]]
   def createSession(id: String, pass: String): F[Either[Unit, Session]]
-  def encrypt(id: String, raw: Array[Byte]): F[Either[Unit, Array[Byte]]]
+
+  def encrypt(id: String, raw: RawData): F[Either[Unit, EncryptedData]]
+
+  def decrypt(id: String, data: EncryptedData): F[Either[Unit, RawData]]
 
 object GpgClient:
   private val url: Uri    = uri"http://127.0.0.1:8080/api/v1/"
@@ -60,11 +77,18 @@ object GpgClient:
         .bimap(se => (), r => Session(r.keyId, r.created, r.expired))
         .pure[F]
 
-    override def encrypt(id: String, raw: Array[Byte]): F[Either[Unit, Array[Byte]]] =
+    override def encrypt(id: String, raw: RawData): F[Either[Unit, EncryptedData]] =
       val client = interpreter.toQuickClient(Endpoints.encrypt, Some(url))
       client(EncryptRequest(id, Base64.getEncoder.encodeToString(raw)))
-        .bimap(se => (), r => Base64.getDecoder.decode(r.base64Payload))
+        .bimap(se => (), r => EncryptedData.from(Base64.getDecoder.decode(r.base64Payload)))
         .pure[F]
+
+    override def decrypt(id: String, data: EncryptedData): F[Either[Unit, RawData]] =
+      val client = interpreter.toQuickClient(Endpoints.decrypt, Some(url))
+      client(DecryptRequest(id, Base64.getEncoder.encodeToString(data)))
+        .bimap(se => (), r => RawData.from(Base64.getDecoder.decode(r.base64Payload)))
+        .pure[F]
+
 
 @main
 def main =
@@ -78,12 +102,13 @@ trait CypherService[F[_]]:
 
 object CypherService:
 
-  private class GpgImpl[F[_]](client: GpgClient[F], fg: String) extends CypherService[F]:
+  private class GpgImpl[F[_] : Functor](client: GpgClient[F], fg: String) extends CypherService[F]:
 
     override def encrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] =
-      client.encrypt(fg, raw)
+      EitherT(client.encrypt(fg, RawData.from(raw))).map(_.underlying).value
 
-    override def decrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] = ???
+    override def decrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] =
+      EitherT(client.decrypt(fg, EncryptedData.from(raw))).map(_.underlying).value
 
   def empty[F[_]: Applicative]: CypherService[F] = new CypherService[F]:
     override def encrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] = raw.asRight.pure

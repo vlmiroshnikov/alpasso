@@ -39,7 +39,7 @@ object GpgShell:
             ).!!
           )
       yield
-        val pubKey = readPublicKey(publicKey).get
+        val pubKey = readPublicKey(publicKey).get // todo err handle
         val privK = readSecretKey(privateKey, pubKey.getKeyID, pass).get
         (new PGPKeyPair(pubKey, privK)).asRight
 

@@ -12,13 +12,41 @@ import org.bouncycastle.util.io.Streams
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, OutputStream}
 import java.util.Date
+import scala.concurrent.duration.{Deadline, FiniteDuration}
 import scala.jdk.CollectionConverters.*
 import scala.util.*
 
 
 case class RawKeyInfo()
 
-type Result = [S] =>> Either[Unit, S]
+enum GpgError:
+  case InvalidGpgPacket, InvalidDataFormat
+
+opaque type SessionId = String
+
+case class Payload(keyPair: PGPKeyPair)
+
+trait SessionStorage[F[_]]:
+  def put(id: SessionId, ttl: FiniteDuration, payload: Payload): F[Unit]
+
+  def get(id: SessionId): F[Option[Payload]]
+
+object SessionStorage:
+  class Impl[F[_]](data: Ref[F, Map[SessionId, (Deadline, Payload)]]) extends SessionStorage[F] {
+    override def put(id: SessionId, ttl: FiniteDuration, payload: Payload): F[Unit] =
+      data.update(v => v.updated(id, (ttl.fromNow, payload)))
+
+    override def get(id: SessionId): F[Option[Payload]] =
+      data.modify { m =>
+        m.get(id) match
+          case Some((deadline, value)) if deadline.isOverdue() => m.removed(id) -> None
+          case Some((_, value)) => m -> value.some
+          case None => m -> None
+      }
+  }
+
+
+type Result = [Z] =>> Either[Unit, Z]
 
 trait GpgService[F[_]]:
   def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]]
@@ -26,9 +54,10 @@ trait GpgService[F[_]]:
 
 
 object GpgService:
-  def make[F[_]: Sync](kp: PGPKeyPair): GpgService[F] = Impl[F](kp)
+  def make[F[_] : Sync](kp: PGPKeyPair): GpgService[F] = Impl[F](kp)
 
   private class Impl[F[_]](kp: PGPKeyPair)(using F: Sync[F]) extends GpgService[F]:
+
     import F.blocking
     import Resource.fromAutoCloseable
 
@@ -44,11 +73,11 @@ object GpgService:
       val bos = new ByteArrayOutputStream()
       (for
         cypherOut <- fromAutoCloseable(blocking(dgen.open(bos, new Array[Byte](1024))))
-        litS <-      fromAutoCloseable(blocking(lData.open(cypherOut, PGPLiteralData.BINARY, "sample", source.length.toLong, new Date())))
+        litS <- fromAutoCloseable(blocking(lData.open(cypherOut, PGPLiteralData.BINARY, "data", source.length.toLong, new Date())))
       yield litS).use(out => blocking(out.write(source))) *> blocking(bos.toByteArray.asRight)
 
     override def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]] =
-      val encryptedIn = PGPUtil.getDecoderStream(new ByteArrayInputStream(raw))
+      val encryptedIn = PGPUtil.getDecoderStream(new ByteArrayInputStream(raw)) // todo ERR
       val pgpObjectFactory = new JcaPGPObjectFactory(encryptedIn)
 
       val pog = pgpObjectFactory.iterator().asScala.toList
@@ -63,22 +92,20 @@ object GpgService:
           val encDataItr = encDataItrLst.collectFirst:
             case data: PGPPublicKeyEncryptedData => data
 
-          val bos = new ByteArrayOutputStream()
-          deco(bos, kp.getPrivateKey, encDataItr.get)
-          F.pure(bos.toByteArray.asRight)
+          F.pure(deco(kp.getPrivateKey, encDataItr.get).asRight)
 
-          /*
-          // Performing Integrity check
-          if (publicKeyEncryptedData.isIntegrityProtected()) {
-            if (!publicKeyEncryptedData.verify()) {
-              throw new PGPException("Message failed integrity check");
-            }
+        /*
+        // Performing Integrity check
+        if (publicKeyEncryptedData.isIntegrityProtected()) {
+          if (!publicKeyEncryptedData.verify()) {
+            throw new PGPException("Message failed integrity check");
           }
-          */
+        }
+        */
 
         case None => ???
 
-    private def deco(out: OutputStream, pk: PGPPrivateKey, pkData: PGPPublicKeyEncryptedData) =
+    private def deco(pk: PGPPrivateKey, pkData: PGPPublicKeyEncryptedData): Array[Byte] =
       val decryptorFactory = new JcePublicKeyDataDecryptorFactoryBuilder()
         .setProvider(BouncyCastleProvider.PROVIDER_NAME)
         .build(pk)
@@ -87,5 +114,4 @@ object GpgService:
 
       val litFact = new JcaPGPObjectFactory(literalData)
       val litData = litFact.nextObject().asInstanceOf[PGPLiteralData]
-      Streams.pipeAll(litData.getInputStream, out)
-      out.close()
+      Streams.readAll(litData.getInputStream)

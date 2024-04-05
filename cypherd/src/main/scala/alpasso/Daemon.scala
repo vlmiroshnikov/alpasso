@@ -90,7 +90,7 @@ object ServerRoutes:
   import Endpoints.*
   import model.*
 
-  val routes: HttpRoutes[IO] =
+  def routes(): HttpRoutes[IO] =
     val redocEndpoints = RedocInterpreter(redocUIOptions = RedocUIOptions.default.contextPath(contextPath).pathPrefix(docPathPrefix))
       .fromEndpoints[IO](List(check, getSession, createSession, encrypt, decrypt), "The tapir library", "1.0.0")
 
@@ -116,7 +116,7 @@ def runDaemon(using log: LogIO[IO]): IO[Unit] =
   BlazeServerBuilder[IO]
     .withExecutionContext(ec)
     .bindHttp(8080, "localhost")
-    .withHttpApp(Router(s"/${contextPath.mkString("/")}" -> ServerRoutes.routes).orNotFound)
+    .withHttpApp(Router(s"/${contextPath.mkString("/")}" -> ServerRoutes.routes()).orNotFound)
     .resource
     .use { _ =>
       val path = (contextPath ++ docPathPrefix).mkString("/")

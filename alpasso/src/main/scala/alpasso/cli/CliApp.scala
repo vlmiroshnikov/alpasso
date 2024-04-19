@@ -15,22 +15,25 @@ import alpasso.core.model.given
 import alpasso.runDaemon
 import alpasso.service.fs.*
 import alpasso.service.fs.model.*
+import alpasso.service.fs.repo.model.CryptoAlg
+import alpasso.service.fs.repo.{ RepositoryMetadataReader, SemVer }
 
-import logstage.{ IzLogger, LogIO, StaticLogRouter }
+import logstage.{ IzLogger, Level, LogIO, StaticLogRouter }
 import scopt.{ OParser, RenderingMode }
 
 object CliApp extends IOApp:
 
-  // val repoDirDefault = Paths.get("", ".tmps").toAbsolutePath
-  val repoDirDefault: Path = Paths.get("/home/vmiroshnikov/workspace/alpasso/.tmps").toAbsolutePath
+  val repoDirDefault: Path = Paths.get(".local").toAbsolutePath
 
   override def run(args: List[String]): IO[ExitCode] =
 
-    val logger      = IzLogger()
-    given LogIO[IO] = LogIO.fromLogger(logger)
-    StaticLogRouter.instance.setup(logger.router)
+    val logger = IzLogger(levels = Map("org.eclipse.jgit" -> Level.Info))
 
-    val ls = LocalStorage.make[IO](repoDirDefault.toString)
+    given LogIO[IO] = LogIO.fromLogger(logger)
+    // StaticLogRouter.instance.setup(logger.router)
+
+    val ls  = LocalStorage.make[IO](repoDirDefault.toString)
+    val rmr = RepositoryMetadataReader.make[IO](repoDirDefault)
 
     val cmd = Command.make[IO](ls)
 
@@ -40,16 +43,21 @@ object CliApp extends IOApp:
     def handle[T: Show](fa: IO[RejectionOr[T]]): IO[Unit] =
       EitherT(fa).foldF(e => IO.println(s"Error: $e"), r => IO.println(r.show))
 
-    val parser = ArgParser(repoDirDefault).parser
-    val r = OParser.parse(parser, args, Action.Empty) match
-      case Some(Action.InitWithPath(path)) => handle(cmd.initWithPath(path))
-      case Some(Action.CreateSecret(Some(name), Some(payload), tags)) =>
+    val parser      = ArgParser(repoDirDefault).parser
+    val maybeAction = IO(OParser.parse(parser, args, Action.Empty))
+    val ctxOpt      = rmr.read
+
+    val r = (maybeAction, rmr.read).flatMapN {
+      case (Some(Action.InitWithPath(path)), left) =>
+        val gpg = CryptoAlg.Gpg("E59532DF27540224AF6A37CF0122EF2757E59DB9")
+        handle(cmd.initWithPath(path, SemVer.zero, gpg))
+      case (Some(Action.CreateSecret(Some(name), Some(payload), tags)), _) =>
         handle(cmd.create(SecretName.of(name), payload, Metadata.of(tags)))
 
-      case Some(Action.UpdateSecret(Some(name), payload, tags)) =>
+      case (Some(Action.UpdateSecret(Some(name), payload, tags)), _) =>
         handle(cmd.update(SecretName.of(name), payload, tags.map(Metadata.of)))
 
-      case Some(Action.FindSecrets(filter, format)) =>
+      case (Some(Action.FindSecrets(filter, format)), _) =>
         format match
           case OutputFormat.Tree =>
             handle(cmd.filter(filter.getOrElse(SecretFilter.All)))
@@ -68,8 +76,9 @@ object CliApp extends IOApp:
               .value
             handle(r1)
 
-      case Some(Action.Daemon(_)) => runDaemon
+      case (Some(Action.Daemon(_)), _) => runDaemon
       case v =>
         IO.println(v.toString) *> IO.println(OParser.usage(parser, RenderingMode.TwoColumns))
+    }
 
     r *> ExitCode.Success.pure[IO]

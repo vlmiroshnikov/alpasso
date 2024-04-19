@@ -1,20 +1,19 @@
 package alpasso.cmdline
 
 import java.nio.file.Path
-
 import cats.*
 import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
-
 import alpasso.cmdline.view.*
 import alpasso.common.syntax.*
 import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
 import alpasso.service.fs.model.*
+import alpasso.service.fs.repo.model.{CryptoAlg, RepositoryMeta}
+import alpasso.service.fs.repo.{RepoMetaErr, RepoMetaIntErr, RepositoryMetadataProvisioner, SemVer}
 import alpasso.service.git.*
-
 import glass.*
 
 enum Err:
@@ -27,9 +26,11 @@ enum Err:
   case InternalErr
 
 object Err:
-  given Upcast[Err, GitError]   = fromGitError(_)
-  given Upcast[Err, StorageErr] = fromStorageErr(_)
-  given Upcast[Err, Unit]       = _ => Err.CypherErr
+  given Upcast[Err, GitError]       = fromGitError(_)
+  given Upcast[Err, StorageErr]     = fromStorageErr(_)
+  given Upcast[Err, Unit]           = _ => Err.CypherErr
+  given Upcast[Err, RepoMetaIntErr] = _ => Err.InternalErr
+  given Upcast[Err, RepoMetaErr]    = _ => Err.InternalErr
 
   private def fromGitError(ge: GitError): Err =
     ge match
@@ -46,7 +47,7 @@ object Err:
 end Err
 
 trait Command[F[_]]:
-  def initWithPath(repoDir: Path): F[RejectionOr[StorageView]]
+  def initWithPath(repoDir: Path, version: SemVer, alg: CryptoAlg): F[RejectionOr[StorageView]]
   def create(name: SecretName, payload: SecretPayload, meta: Metadata): F[RejectionOr[SecretView]]
   def update(name: SecretName, payload: Option[SecretPayload], meta: Option[Metadata]): F[RejectionOr[SecretView]]
   def filter(filter: SecretFilter): F[RejectionOr[Option[Node[Branch[SecretView]]]]]
@@ -56,8 +57,14 @@ object Command:
 
   private class Impl[F[_]: Async: Logger](ls: LocalStorage[F]) extends Command[F]:
 
-    override def initWithPath(repoDir: Path): F[RejectionOr[StorageView]] =
-      GitRepo.createNew(repoDir).use(r => r.info.map(StorageView(_).asRight))
+    override def initWithPath(repoDir: Path, version: SemVer, alg: CryptoAlg): F[RejectionOr[StorageView]] =
+      val files = NonEmptyList.of(repoDir.resolve(RepositoryMetadataProvisioner.repoMetadataFile))
+      GitRepo.createNew(repoDir).use { repo =>
+        (for
+          ctx <- RepositoryMetadataProvisioner.make(repoDir).build(SemVer.zero, alg).liftTo[Err]
+          _   <- repo.commitFiles(files, "Init repository").liftTo[Err]
+        yield StorageView(repoDir)).value
+      }
 
     override def filter(filter: SecretFilter): F[RejectionOr[Option[Node[Branch[SecretView]]]]] =
       def predicate(s: Secret[Metadata]): Boolean =
@@ -93,7 +100,7 @@ object Command:
         for
           home <- ls.repoDir().liftTo[Err]
           gpg <- CypherService
-                   .makeGpgCypher[F]("C7FE51E3A3790ABE0D9FD172DA874AB03CF06294",
+                   .makeGpgCypher[F]("E59532DF27540224AF6A37CF0122EF2757E59DB9",
                                      () => Sync[F].pure("$!lentium")
                    )
                    .liftTo[Err]

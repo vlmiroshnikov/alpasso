@@ -129,3 +129,8 @@ object Daemon extends IOApp:
   override def run(args: List[String]): IO[ExitCode] =
     given LogIO[IO] = LogIO.fromLogger(IzLogger())
     runDaemon.as(ExitCode.Success)
+
+
+
+trait ServerAPI[F[_]]:
+  def validate()

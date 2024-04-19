@@ -22,21 +22,20 @@ case class RawKeyInfo()
 enum GpgError:
   case InvalidGpgPacket, InvalidDataFormat
 
-opaque type SessionId = String
+type SessionId = String
 
-case class Payload(keyPair: PGPKeyPair)
+case class SessionPayload(keyPair: PGPKeyPair)
 
 trait SessionStorage[F[_]]:
-  def put(id: SessionId, ttl: FiniteDuration, payload: Payload): F[Unit]
-
-  def get(id: SessionId): F[Option[Payload]]
+  def put(id: SessionId, ttl: FiniteDuration, payload: SessionPayload): F[Unit]
+  def get(id: SessionId): F[Option[SessionPayload]]
 
 object SessionStorage:
-  class Impl[F[_]](data: Ref[F, Map[SessionId, (Deadline, Payload)]]) extends SessionStorage[F] {
-    override def put(id: SessionId, ttl: FiniteDuration, payload: Payload): F[Unit] =
+  class Impl[F[_]](data: Ref[F, Map[SessionId, (Deadline, SessionPayload)]]) extends SessionStorage[F] {
+    override def put(id: SessionId, ttl: FiniteDuration, payload: SessionPayload): F[Unit] =
       data.update(v => v.updated(id, (ttl.fromNow, payload)))
 
-    override def get(id: SessionId): F[Option[Payload]] =
+    override def get(id: SessionId): F[Option[SessionPayload]] =
       data.modify { m =>
         m.get(id) match
           case Some((deadline, value)) if deadline.isOverdue() => m.removed(id) -> None

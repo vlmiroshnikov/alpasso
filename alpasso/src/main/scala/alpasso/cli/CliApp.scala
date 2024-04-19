@@ -16,7 +16,8 @@ import alpasso.runDaemon
 import alpasso.service.fs.*
 import alpasso.service.fs.model.*
 import alpasso.service.fs.repo.model.CryptoAlg
-import alpasso.service.fs.repo.{ RepositoryMetadataReader, SemVer }
+import alpasso.service.fs.repo.RepositoryMetadataReader
+import alpasso.shared.SemVer
 
 import logstage.{ IzLogger, Level, LogIO, StaticLogRouter }
 import scopt.{ OParser, RenderingMode }

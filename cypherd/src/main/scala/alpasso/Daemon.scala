@@ -1,5 +1,10 @@
 package alpasso
 
+import alpasso.daeamon.gpg.{GpgShell, SessionPayload, SessionStorage}
+import alpasso.shared.SemVer
+import cats.data.EitherT
+import cats.effect.kernel.Sync
+
 import java.time.OffsetDateTime
 import cats.syntax.all.*
 import cats.effect.{ExitCode, IO, IOApp}
@@ -15,8 +20,9 @@ import sttp.tapir.redoc.RedocUIOptions
 import sttp.tapir.redoc.bundle.RedocInterpreter
 import sttp.tapir.server.ServerEndpoint
 import sttp.tapir.server.http4s.Http4sServerInterpreter
-
 import logstage.*
+
+import scala.concurrent.duration.*
 
 object model:
   given Configuration = Configuration.default.withSnakeCaseMemberNames
@@ -133,4 +139,28 @@ object Daemon extends IOApp:
 
 
 trait ServerAPI[F[_]]:
-  def validate()
+  def validate(version: SemVer): F[Either[Unit, Unit]]
+  def getSession(keyId: String): F[Either[SessionError, Unit]]
+  def createSession(keyId: String, pass: String): F[Either[SessionError, Unit]]
+
+  def encrypt(keyId: String, payload: Array[Byte]): F[Either[Unit, Array[Byte]]]
+  def decrypt(keyId: String, payload: Array[Byte]): F[Either[Unit, Array[Byte]]]
+
+
+object ServerAPI:
+  def make[F[_]: Sync](sessions: SessionStorage[F]): ServerAPI[F] =  new ServerAPI[F]:
+    override def validate(version: SemVer): F[Either[Unit, Unit]] =
+      ().asRight.pure[F]
+
+    override def getSession(keyId: String): F[Either[SessionError, Unit]] =
+      sessions.get(keyId).map(_.fold(SessionError.NotFound(keyId).asLeft)(_ => ().asRight))
+
+    override def createSession(keyId: String, pass: String): F[Either[SessionError, Unit]] =
+      (for
+        kp <- EitherT(GpgShell.make[F].loadKeyPair(keyId, pass))
+        _  <- EitherT.liftF(sessions.put(keyId, 5.minutes, SessionPayload(kp)))
+      yield ()).leftMap(_ => SessionError.Unknown).value
+
+    override def encrypt(keyId: String, payload: Array[Byte]): F[Either[Unit, Array[Byte]]] = ???
+
+    override def decrypt(keyId: String, payload: Array[Byte]): F[Either[Unit, Array[Byte]]] = ???

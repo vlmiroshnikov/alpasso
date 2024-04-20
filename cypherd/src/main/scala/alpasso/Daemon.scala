@@ -1,6 +1,6 @@
 package alpasso
 
-import alpasso.daeamon.gpg.{GpgShell, SessionPayload, SessionStorage}
+import alpasso.daeamon.gpg.{GpgService, GpgShell, SessionPayload, SessionStorage}
 import alpasso.shared.SemVer
 import cats.data.EitherT
 import cats.effect.kernel.Sync
@@ -21,7 +21,10 @@ import sttp.tapir.redoc.bundle.RedocInterpreter
 import sttp.tapir.server.ServerEndpoint
 import sttp.tapir.server.http4s.Http4sServerInterpreter
 import logstage.*
+import org.bouncycastle.jce.provider.BouncyCastleProvider
 
+import java.security.Security
+import java.util.Base64
 import scala.concurrent.duration.*
 
 object model:
@@ -38,6 +41,10 @@ object model:
   case class GetSessionRequest(keyId: String) derives ConfiguredCodec
   object GetSessionRequest:
     given Schema[GetSessionRequest] = Schema.derived
+
+  case class CreateSessionRequest(keyId: String, pass: String) derives ConfiguredCodec
+  object CreateSessionRequest:
+    given Schema[CreateSessionRequest] = Schema.derived
 
   case class SessionDataResponse(keyId: String, created: OffsetDateTime, expired: OffsetDateTime) derives ConfiguredCodec
   object SessionDataResponse:
@@ -82,8 +89,13 @@ object Endpoints:
           oneOfDefaultVariant(emptyOutputAs(SessionError.Unknown))
       ))
 
-  val createSession: PublicEndpoint[GetSessionRequest, Unit, SessionDataResponse, Any] =
-    endpoint.put.in("gpg" / "sessions").in(jsonBody[GetSessionRequest]).out(jsonBody[SessionDataResponse])
+  val createSession: PublicEndpoint[CreateSessionRequest, SessionError, SessionDataResponse, Any] =
+    endpoint.put.in("gpg" / "sessions").in(jsonBody[CreateSessionRequest]).out(jsonBody[SessionDataResponse])
+      .errorOut(
+        oneOf[SessionError](
+          oneOfVariant(statusCode(StatusCode.NotFound).and(stringBody.mapTo[SessionError.NotFound])),
+          oneOfDefaultVariant(emptyOutputAs(SessionError.Unknown))
+        ))
 
   val encrypt: PublicEndpoint[EncryptRequest, Unit, EncryptResponse, Any] =
     endpoint.put.in("gpg" / "encrypt").in(jsonBody[EncryptRequest]).out(jsonBody[EncryptResponse])
@@ -96,7 +108,7 @@ object ServerRoutes:
   import Endpoints.*
   import model.*
 
-  def routes(): HttpRoutes[IO] =
+  def routes(api: ServerAPI[IO]): HttpRoutes[IO] =
     val redocEndpoints = RedocInterpreter(redocUIOptions = RedocUIOptions.default.contextPath(contextPath).pathPrefix(docPathPrefix))
       .fromEndpoints[IO](List(check, getSession, createSession, encrypt, decrypt), "The tapir library", "1.0.0")
 
@@ -108,10 +120,29 @@ object ServerRoutes:
           println("HealCheck run")
           CheckResponse().asRight
       },
-      getSession.serverLogicPure[IO](req => SessionError.NotFound(req.keyId).asLeft),
-      createSession.serverLogicPure[IO](req => SessionDataResponse(req.keyId, OffsetDateTime.now(), OffsetDateTime.now().plusHours(1L)).asRight),
-      encrypt.serverLogicPure[IO](req => EncryptResponse(req.keyId, req.base64Payload).asRight),
-      decrypt.serverLogicPure[IO](req => DecryptResponse(req.keyId, req.base64Payload).asRight),
+      getSession.serverLogic[IO]{
+        req =>
+          EitherT(api.getSession(req.keyId))
+            .map(r => SessionDataResponse(req.keyId, OffsetDateTime.now(), OffsetDateTime.now()))
+            .value
+      },
+      createSession.serverLogic[IO]{
+        req =>
+          EitherT(api.createSession(req.keyId, req.pass))
+            .map(r => SessionDataResponse(req.keyId, OffsetDateTime.now(), OffsetDateTime.now()))
+            .value
+      },
+      encrypt.serverLogic[IO] {
+        req =>
+          EitherT(api.encrypt(req.keyId, Base64.getDecoder.decode(req.base64Payload)))
+            .map(r => EncryptResponse(req.keyId, Base64.getEncoder.encodeToString(r)))
+            .value
+      },
+      decrypt.serverLogic[IO] { req =>
+        EitherT(api.decrypt(req.keyId, Base64.getDecoder.decode(req.base64Payload)))
+          .map(r => DecryptResponse(req.keyId, Base64.getEncoder.encodeToString(r)))
+          .value
+      },
     )
 
     intpr.toRoutes(redocEndpoints) <+> intpr.toRoutes(endpoints)
@@ -119,15 +150,19 @@ object ServerRoutes:
 
 def runDaemon(using log: LogIO[IO]): IO[Unit] =
   val ec = scala.concurrent.ExecutionContext.global
-  BlazeServerBuilder[IO]
-    .withExecutionContext(ec)
-    .bindHttp(8080, "localhost")
-    .withHttpApp(Router(s"/${contextPath.mkString("/")}" -> ServerRoutes.routes()).orNotFound)
-    .resource
-    .use { _ =>
-      val path = (contextPath ++ docPathPrefix).mkString("/")
-      log.info(s"go to: http://127.0.0.1:8080/$path") *> IO.never 
-    }
+  Security.addProvider(new BouncyCastleProvider())
+
+  SessionStorage.make[IO].map(ServerAPI.make(_)).flatMap { api =>
+    BlazeServerBuilder[IO]
+      .withExecutionContext(ec)
+      .bindHttp(8080, "localhost")
+      .withHttpApp(Router(s"/${contextPath.mkString("/")}" -> ServerRoutes.routes(api)).orNotFound)
+      .resource
+      .use { _ =>
+        val path = (contextPath ++ docPathPrefix).mkString("/")
+        log.info(s"go to: http://127.0.0.1:8080/$path") *> IO.never
+      }
+  }
 
 
 object Daemon extends IOApp:
@@ -161,6 +196,14 @@ object ServerAPI:
         _  <- EitherT.liftF(sessions.put(keyId, 5.minutes, SessionPayload(kp)))
       yield ()).leftMap(_ => SessionError.Unknown).value
 
-    override def encrypt(keyId: String, payload: Array[Byte]): F[Either[Unit, Array[Byte]]] = ???
+    override def encrypt(keyId: String, payload: Array[Byte]): F[Either[Unit, Array[Byte]]] =
+      (for
+        gpg <- EitherT.fromOptionF(sessions.get(keyId), ()).map(v=>GpgService.make(v.keyPair))
+        res <-  EitherT(gpg.encrypt(payload))
+      yield res).value
 
-    override def decrypt(keyId: String, payload: Array[Byte]): F[Either[Unit, Array[Byte]]] = ???
+    override def decrypt(keyId: String, payload: Array[Byte]): F[Either[Unit, Array[Byte]]] =
+      (for
+        gpg <- EitherT.fromOptionF(sessions.get(keyId), ()).map(v => GpgService.make(v.keyPair))
+        res <- EitherT(gpg.decrypt(payload))
+      yield res).value

@@ -68,7 +68,7 @@ object Command:
       }
 
     override def filter(filter: SecretFilter): F[RejectionOr[Option[Node[Branch[SecretView]]]]] =
-      def predicate(s: Secret[Metadata]): Boolean =
+      def predicate(s: Secret[(RawSecretData, Metadata)]): Boolean =
         filter match
           case SecretFilter.Predicate(pattern) =>
             s.name.contains(pattern)
@@ -82,9 +82,14 @@ object Command:
         tree <- rawTree.traverse:
                   case Branch.Empty(dir) => EitherT.pure(Branch.Empty(dir))
                   case Branch.Solid(dir, s) =>
-                    ls.loadMeta(s.map(_.metadata)).liftTo[Err].map(m => Branch.Solid(dir, m))
-      yield cutTree[Secret[Metadata]](tree, predicate)
-        .map(_.traverse(b => Id(b.map(sm => SecretView(sm.name, MetadataView(sm.payload))))))
+                    ls.loadFully(s.map(_.metadata)).liftTo[Err].map(m => Branch.Solid(dir, m))
+        gpg <- CypherService
+          .makeGpgCypher[F]("64695F7D212F979D3553AFC5E0D6CE10FBEB0423",
+            () => Sync[F].pure("$!lentium")
+          )
+          .liftTo[Err]
+      yield cutTree(tree, predicate)
+        .map(_.traverse(b => Id(b.map(sm => SecretView(sm.name, MetadataView(sm.payload._2), sm.payload._1.show.some)))))
 
       buildTree.value
 
@@ -101,7 +106,7 @@ object Command:
         for
           home <- ls.repoDir().liftTo[Err]
           gpg <- CypherService
-                   .makeGpgCypher[F]("E59532DF27540224AF6A37CF0122EF2757E59DB9",
+                   .makeGpgCypher[F]("64695F7D212F979D3553AFC5E0D6CE10FBEB0423",
                                      () => Sync[F].pure("$!lentium")
                    )
                    .liftTo[Err]

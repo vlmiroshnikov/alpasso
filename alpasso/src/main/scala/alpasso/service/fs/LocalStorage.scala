@@ -28,6 +28,8 @@ trait LocalStorage[F[_]]:
 
   def loadPayload(secret: Secret[Path]): F[StorageResult[Secret[RawSecretData]]]
   def loadMeta(secret: Secret[Path]): F[StorageResult[Secret[Metadata]]]
+  def loadFully(secret: Secret[Path]): F[StorageResult[Secret[(RawSecretData, Metadata)]]]
+
 
   def walkTree: F[StorageResult[Node[Branch[Secret[RawStoreLocations]]]]]
 
@@ -80,6 +82,12 @@ object LocalStorage:
                    Secret(secret.name, _)
             )
       }
+
+    override def loadFully(secret: Secret[Path]): F[StorageResult[Secret[(RawSecretData, Metadata)]]] =
+      for
+        p <- loadPayload(secret)
+        m <- loadMeta(secret)
+      yield (p, m).mapN((a, b) => Secret(a.name, (a.payload, b.payload)))
 
     override def loadPayload(secret: Secret[Path]): F[StorageResult[Secret[RawSecretData]]] =
       val path = secret.payload

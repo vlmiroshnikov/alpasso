@@ -2,7 +2,7 @@ import sbt.Keys.*
 import sbt.*
 
 object Versions {
-  val scala      = "3.3.1"
+  val scala      = "3.4.1"
   val cats       = "2.10.0"
   val catsEffect = "3.5.1"
   val circe      = "0.14.6"
@@ -31,7 +31,7 @@ object Deps {
   lazy val tapir      = Seq(
       "com.softwaremill.sttp.tapir" %% "tapir-http4s-server" % "1.9.9",
       "com.softwaremill.sttp.tapir" %% "tapir-json-circe" % "1.10.3",
-      "com.softwaremill.sttp.tapir" %% "tapir-redoc-bundle" % "1.9.9",
+      "com.softwaremill.sttp.tapir" %% "tapir-redoc-bundle" % "1.10.4",
       "com.softwaremill.sttp.tapir" %% "tapir-sttp-client" % "1.10.3"
   )
 

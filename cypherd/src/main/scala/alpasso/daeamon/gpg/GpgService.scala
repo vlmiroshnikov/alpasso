@@ -31,6 +31,9 @@ trait SessionStorage[F[_]]:
   def get(id: SessionId): F[Option[SessionPayload]]
 
 object SessionStorage:
+  def make[F[_]: Sync]: F[SessionStorage[F]] =
+    Ref.of(Map.empty[SessionId, (Deadline, SessionPayload)]).map(ref=> Impl[F](ref))
+
   class Impl[F[_]](data: Ref[F, Map[SessionId, (Deadline, SessionPayload)]]) extends SessionStorage[F] {
     override def put(id: SessionId, ttl: FiniteDuration, payload: SessionPayload): F[Unit] =
       data.update(v => v.updated(id, (ttl.fromNow, payload)))

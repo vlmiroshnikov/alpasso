@@ -2,14 +2,11 @@ package alpasso.service.cypher
 
 import java.time.OffsetDateTime
 import java.util.Base64
-
 import cats.*
 import cats.effect.*
 import cats.syntax.all.*
-
 import alpasso.Endpoints
-import alpasso.model.{ DecryptRequest, EncryptRequest, GetSessionRequest }
-
+import alpasso.model.{CreateSessionRequest, DecryptRequest, EncryptRequest, GetSessionRequest}
 import izumi.logstage.api.IzLogger
 import logstage.LogIO
 import sttp.client3.UriContext
@@ -64,7 +61,7 @@ object GpgClient:
 
     override def createSession(id: String, pass: String): ResultF[F, SessionInfo] =
       val client = interpreter.toQuickClient(Endpoints.createSession, Some(url))
-      client(GetSessionRequest(id))
+      client(CreateSessionRequest(id, pass))
         .bimap(se => (), r => SessionInfo(r.keyId, r.created, r.expired))
         .pure[F]
 

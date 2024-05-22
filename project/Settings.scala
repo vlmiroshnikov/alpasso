@@ -20,19 +20,22 @@ object Settings {
 object Deps {
   lazy val cats       = Seq("org.typelevel" %% "cats-core").map(_ % Versions.cats)
   lazy val catsEffect = Seq("org.typelevel" %% "cats-effect").map(_ % Versions.catsEffect)
+  lazy val tagless    = Seq("org.typelevel" %% "cats-tagless-core" % "0.15.0")
   lazy val bouncy     = Seq("org.bouncycastle" % "bcprov-jdk18on", "org.bouncycastle" % "bcpg-jdk18on").map(_  % "1.76")
   lazy val jgit       = Seq("org.eclipse.jgit" % "org.eclipse.jgit" % "6.6.1.202309021850-r")
   lazy val fs2        = Seq("co.fs2" %% "fs2-core", "co.fs2" %% "fs2-io").map( _ % "3.10.0")
   lazy val scopt      = Seq("com.github.scopt" %% "scopt" % "4.1.0")
   lazy val glass      = Seq("tf.tofu" %% "glass-core" % "0.3.0")
   lazy val circe      = Seq("io.circe" %% "circe-core", "io.circe" %% "circe-parser").map(_ % Versions.circe)
+  lazy val evo_circe  = Seq("com.evolution" % "derivation-circe_3" % "0.2.0")
   lazy val decline    = Seq("com.monovore" %% "decline" % "2.4.1")
+  lazy val tofu       = Seq("tf.tofu" %% "tofu-core-higher-kind" % "0.13.1")
 
   lazy val tapir      = Seq(
-      "com.softwaremill.sttp.tapir" %% "tapir-http4s-server" % "1.9.9",
-      "com.softwaremill.sttp.tapir" %% "tapir-json-circe" % "1.10.3",
-      "com.softwaremill.sttp.tapir" %% "tapir-redoc-bundle" % "1.10.4",
-      "com.softwaremill.sttp.tapir" %% "tapir-sttp-client" % "1.10.3"
+      "com.softwaremill.sttp.tapir" %% "tapir-http4s-server" % "1.10.7",
+      "com.softwaremill.sttp.tapir" %% "tapir-json-circe" % "1.10.7",
+      "com.softwaremill.sttp.tapir" %% "tapir-redoc-bundle" % "1.10.6",
+      "com.softwaremill.sttp.tapir" %% "tapir-sttp-client" % "1.10.7"
   )
 
   lazy val logstage  = Seq(

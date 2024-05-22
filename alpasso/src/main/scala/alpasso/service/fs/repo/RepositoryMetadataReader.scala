@@ -12,16 +12,22 @@ import io.circe.derivation.*
 import io.circe.syntax.given
 import logstage.LogIO
 
-case class Config(current: Path)
+import evo.derivation.*
+import evo.derivation.circe.*
+import evo.derivation.config.Config
+
+case class RootPathConfig(current: Path)
 
 object model:
-  given Configuration = Configuration.default.withSnakeCaseMemberNames
 
-  enum CryptoAlg:
+  @Discriminator("alg_type")
+  @SnakeCase
+  enum CryptoAlg derives Config, EvoCodec:
     case Gpg(fingerprint: String)
-    case None
+    case Raw
 
-  case class RepositoryMeta(version: SemVer, cryptoAlg: CryptoAlg) derives ConfiguredCodec
+  @SnakeCase
+  case class RepositoryMeta(version: SemVer, cryptoAlg: CryptoAlg) derives Config, EvoCodec
 
 type Logger[F[_]] = LogIO[F]
 

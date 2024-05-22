@@ -30,8 +30,9 @@ trait LocalStorage[F[_]]:
   def loadMeta(secret: Secret[Path]): F[StorageResult[Secret[Metadata]]]
   def loadFully(secret: Secret[Path]): F[StorageResult[Secret[(RawSecretData, Metadata)]]]
 
-
   def walkTree: F[StorageResult[Node[Branch[Secret[RawStoreLocations]]]]]
+
+
 
 object LocalStorage:
 

@@ -5,7 +5,7 @@ lazy val core = project
   .in(file("core"))
   .settings(Settings.common)
   .settings(
-    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.bouncy ++ Deps.fs2
+    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.bouncy ++ Deps.fs2 ++ Deps.tagless ++ Deps.evo_circe
   )
 
 lazy val shared = project
@@ -33,7 +33,7 @@ lazy val alpasso = project
   .dependsOn(core, cypherd, shared)
   .settings(Settings.common)
   .settings(
-    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.scopt ++ Deps.jgit ++ Deps.glass ++ Deps.circe ++ Deps.logstage
+    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.scopt ++ Deps.jgit ++ Deps.glass ++ Deps.circe ++ Deps.logstage ++ Deps.tagless ++ Deps.tofu
   )
 
 lazy val root = project

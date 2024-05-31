@@ -8,6 +8,8 @@ import cats.data.EitherT
 import cats.effect.*
 import cats.syntax.all.*
 
+import alpasso.service.fs.repo.model.CryptoAlg
+
 import logstage.LogIO
 import logstage.LogIO.log
 
@@ -28,6 +30,14 @@ object CypherService:
   def empty[F[_]: Applicative]: CypherService[F] = new CypherService[F]:
     override def encrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] = raw.asRight.pure
     override def decrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] = raw.asRight.pure
+
+  def make[F[_]: Async: Logger](alg: CryptoAlg): F[Either[Unit, CypherService[F]]] = {
+    alg match
+      case CryptoAlg.Gpg(fg) =>
+        CypherService.makeGpgCypher(fg, () => Sync[F].pure("$!lentium"))
+      case CryptoAlg.Raw =>
+        CypherService.empty.asRight.pure[F]
+  }
 
   def makeGpgCypher[F[_]: Async: Logger](fg: String, enterPass: () => F[String]): F[Either[Unit, CypherService[F]]] =
     val client = GpgClient.make[F]()

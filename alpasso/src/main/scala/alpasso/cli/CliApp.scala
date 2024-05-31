@@ -2,6 +2,8 @@ package alpasso.cli
 
 import java.nio.file.*
 
+import scala.annotation.experimental
+
 import cats.*
 import cats.data.*
 import cats.effect.*
@@ -15,13 +17,14 @@ import alpasso.core.model.given
 import alpasso.runDaemon
 import alpasso.service.fs.*
 import alpasso.service.fs.model.*
-import alpasso.service.fs.repo.model.CryptoAlg
-import alpasso.service.fs.repo.RepositoryMetadataReader
+import alpasso.service.fs.repo.RepositoryConfigReader
+import alpasso.service.fs.repo.model.{ CryptoAlg, RepositoryConfiguration }
 import alpasso.shared.SemVer
 
 import logstage.{ IzLogger, Level, LogIO, StaticLogRouter }
 import scopt.{ OParser, RenderingMode }
 
+@experimental
 object CliApp extends IOApp:
 
   val repoDirDefault: Path = Paths.get(".local").toAbsolutePath
@@ -33,10 +36,9 @@ object CliApp extends IOApp:
     given LogIO[IO] = LogIO.fromLogger(logger)
     // StaticLogRouter.instance.setup(logger.router)
 
-    val ls  = LocalStorage.make[IO](repoDirDefault.toString)
-    val rmr = RepositoryMetadataReader.make[IO](repoDirDefault)
+    val rmr = RepositoryConfigReader.make[IO](repoDirDefault)
 
-    val cmd = Command.make[IO](ls)
+    val cmd = Command.make[IO]
 
     given [A: Show]: Show[Option[A]] =
       Show.show[Option[A]](_.fold("empty")(_.show))
@@ -50,21 +52,24 @@ object CliApp extends IOApp:
 
     val r = (maybeAction, rmr.read).flatMapN {
       case (Some(Action.InitWithPath(path)), left) =>
-        //val gpg = CryptoAlg.Gpg("E59532DF27540224AF6A37CF0122EF2757E59DB9")
+        // val gpg = CryptoAlg.Gpg("E59532DF27540224AF6A37CF0122EF2757E59DB9")
         val gpg = CryptoAlg.Gpg("64695F7D212F979D3553AFC5E0D6CE10FBEB0423")
         handle(cmd.initWithPath(path, SemVer.zero, gpg))
-      case (Some(Action.CreateSecret(Some(name), Some(payload), tags)), _) =>
-        handle(cmd.create(SecretName.of(name), payload, Metadata.of(tags)))
+      case (Some(Action.CreateSecret(Some(name), Some(payload), tags)), Right(cfg)) =>
+        val c = RepositoryConfiguration(repoDirDefault, cfg.version, cfg.cryptoAlg)
+        handle(cmd.create(SecretName.of(name), payload, Metadata.of(tags), c))
 
-      case (Some(Action.UpdateSecret(Some(name), payload, tags)), _) =>
-        handle(cmd.update(SecretName.of(name), payload, tags.map(Metadata.of)))
+      case (Some(Action.UpdateSecret(Some(name), payload, tags)), Right(cfg)) =>
+        val c = RepositoryConfiguration(repoDirDefault, cfg.version, cfg.cryptoAlg)
+        handle(cmd.update(SecretName.of(name), payload, tags.map(Metadata.of), c))
 
-      case (Some(Action.FindSecrets(filter, format)), _) =>
+      case (Some(Action.FindSecrets(filter, format)), Right(cfg)) =>
+        val c = RepositoryConfiguration(repoDirDefault, cfg.version, cfg.cryptoAlg)
         format match
           case OutputFormat.Tree =>
-            handle(cmd.filter(filter.getOrElse(SecretFilter.All)))
+            handle(cmd.filter(filter.getOrElse(SecretFilter.All), c))
           case OutputFormat.Table =>
-            val res = cmd.filter(filter.getOrElse(SecretFilter.All))
+            val res = cmd.filter(filter.getOrElse(SecretFilter.All), c)
             val r1 = res
               .nested
               .nested

@@ -101,7 +101,7 @@ object Endpoints:
     endpoint.put.in("gpg" / "encrypt").in(jsonBody[EncryptRequest]).out(jsonBody[EncryptResponse])
 
   val decrypt: PublicEndpoint[DecryptRequest, Unit, DecryptResponse, Any] =
-    endpoint.put.in("gpg" / "encrypt").in(jsonBody[DecryptRequest]).out(jsonBody[DecryptResponse])
+    endpoint.put.in("gpg" / "decrypt").in(jsonBody[DecryptRequest]).out(jsonBody[DecryptResponse])
 
 
 object ServerRoutes:

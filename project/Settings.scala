@@ -2,7 +2,7 @@ import sbt.Keys.*
 import sbt.*
 
 object Versions {
-  val scala      = "3.4.1"
+  val scala      = "3.3.3"
   val cats       = "2.10.0"
   val catsEffect = "3.5.1"
   val circe      = "0.14.6"
@@ -13,14 +13,14 @@ object Settings {
 
   lazy val common = Seq(
     version        := Versions.scala,
-    scalacOptions ++= Seq("-deprecation", "-new-syntax")
+    scalacOptions ++= Seq("-deprecation", "-new-syntax", "-Ykind-projector")
   )
 }
 
 object Deps {
   lazy val cats       = Seq("org.typelevel" %% "cats-core").map(_ % Versions.cats)
   lazy val catsEffect = Seq("org.typelevel" %% "cats-effect").map(_ % Versions.catsEffect)
-  lazy val tagless    = Seq("org.typelevel" %% "cats-tagless-core" % "0.15.0")
+  lazy val tagless    = Seq("org.typelevel" %% "cats-tagless-core" % "0.16.0")
   lazy val bouncy     = Seq("org.bouncycastle" % "bcprov-jdk18on", "org.bouncycastle" % "bcpg-jdk18on").map(_  % "1.76")
   lazy val jgit       = Seq("org.eclipse.jgit" % "org.eclipse.jgit" % "6.6.1.202309021850-r")
   lazy val fs2        = Seq("co.fs2" %% "fs2-core", "co.fs2" %% "fs2-io").map( _ % "3.10.0")

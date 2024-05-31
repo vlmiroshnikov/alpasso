@@ -2,11 +2,15 @@ package alpasso.service.cypher
 
 import java.time.OffsetDateTime
 import java.util.Base64
+
 import cats.*
+import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
+
 import alpasso.Endpoints
-import alpasso.model.{CreateSessionRequest, DecryptRequest, EncryptRequest, GetSessionRequest}
+import alpasso.model.{ CreateSessionRequest, DecryptRequest, EncryptRequest, GetSessionRequest }
+
 import izumi.logstage.api.IzLogger
 import logstage.LogIO
 import sttp.client3.UriContext
@@ -79,6 +83,21 @@ object GpgClient:
 
 @main
 def main =
+  import cats.effect.unsafe.implicits.global
+  import java.nio.file.*
+
   given Logger[IO] = LogIO.fromLogger(IzLogger())
-  val res = CypherService
-    .makeGpgCypher[IO]("E59532DF27540224AF6A37CF0122EF2757E59DB9", () => IO.pure("$!lentium"))
+  EitherT(
+    CypherService
+      .makeGpgCypher[IO]("64695F7D212F979D3553AFC5E0D6CE10FBEB0423", () => IO.pure("$!lentium"))
+  ).semiflatTap { cs =>
+    val re = for {
+      c <- EitherT(cs.encrypt("data".getBytes))
+      _ <- EitherT.liftF(IO(Files.write(Path.of("smp"), c)))
+      r <- EitherT(cs.decrypt(c))
+      - <- EitherT.liftF(IO.println(new String(r)))
+    } yield ()
+
+    re.value.flatTap(rr => IO.println(rr))
+
+  }.value.unsafeRunSync()

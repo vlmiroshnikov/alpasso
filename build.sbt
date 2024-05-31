@@ -1,5 +1,7 @@
 
 ThisBuild / scalaVersion := Versions.scala
+ThisBuild / evictionErrorLevel := Level.Warn
+
 
 lazy val core = project
   .in(file("core"))
@@ -12,7 +14,7 @@ lazy val shared = project
   .in(file("shared"))
   .settings(Settings.common)
   .settings(
-    libraryDependencies ++= Deps.cats
+    libraryDependencies ++= Deps.cats ++ Deps.evo_circe ++ Deps.circe
   )
 
 lazy val cypherd = project

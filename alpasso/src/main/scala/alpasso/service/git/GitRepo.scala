@@ -56,8 +56,7 @@ object GitRepo:
 
   def createNew[F[_]: Sync](repoDir: Path): Resource[F, GitRepo[F]] = Resource
     .fromAutoCloseable(Sync[F].blocking {
-      val home       = Files.createDirectory(repoDir)
-      val repository = FileRepositoryBuilder.create(home.resolve(".git").toFile)
+      val repository = FileRepositoryBuilder.create(repoDir.resolve(".git").toFile)
       repository.create()
       repository
     })

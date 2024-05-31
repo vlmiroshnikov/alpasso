@@ -14,7 +14,7 @@ import scala.util.*
 def main =
   Security.addProvider(new BouncyCastleProvider())
 
-  val keyId = "C7FE51E3A3790ABE0D9FD172DA874AB03CF06294"
+  val keyId = "64695F7D212F979D3553AFC5E0D6CE10FBEB0423"
   val pass  = "$!lentium"
 
   val gpgShell = GpgShell.make[IO]

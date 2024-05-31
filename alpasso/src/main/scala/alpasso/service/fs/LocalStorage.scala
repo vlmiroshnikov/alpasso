@@ -5,110 +5,182 @@ import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file.{ FileVisitResult, FileVisitor, Files, Path, Paths }
 
+import scala.annotation.experimental
 import scala.collection.mutable
 
 import cats.*
 import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
+import cats.tagless.*
+import cats.tagless.derived.*
+import cats.tagless.syntax.*
 
+import alpasso.cmdline.Err
+import alpasso.common.syntax.*
 import alpasso.core.model.*
+import alpasso.service.cypher.{ CypherService, Logger }
 import alpasso.service.fs.model.*
+import alpasso.service.fs.repo.model.{ CryptoAlg, RepositoryConfiguration }
+import alpasso.service.git.GitRepo
 
 import io.circe.{ Decoder, Encoder, Json }
+import logstage.LogIO
+import logstage.LogIO.log
+import tofu.higherKind.*
+import tofu.higherKind.Mid.{ attach, * }
 
-trait StorageCtx:
-  def repoDir: Path
-  def resolve(file: String): Path
+@experimental
+trait LocalStorage[F[_]] derives ApplyK:
+  def create(name: SecretName, payload: RawSecretData, meta: Metadata): F[RejectionOr[Secret[RawStoreLocations]]]
+  def update(name: SecretName, payload: RawSecretData, meta: Metadata): F[RejectionOr[Secret[RawStoreLocations]]]
 
-trait LocalStorage[F[_]]:
-  def repoDir(): F[StorageResult[Path]]
-  def create(name: SecretName, payload: RawSecretData, meta: Metadata): F[StorageResult[Secret[RawStoreLocations]]]
-  def update(name: SecretName, payload: RawSecretData, meta: Metadata): F[StorageResult[Secret[RawStoreLocations]]]
+  def loadPayload(secret: Secret[Path]): F[RejectionOr[Secret[RawSecretData]]]
+  def loadMeta(secret: Secret[Path]): F[RejectionOr[Secret[Metadata]]]
+  def loadFully(secret: Secret[RawStoreLocations]): F[RejectionOr[Secret[(RawSecretData, Metadata)]]]
 
-  def loadPayload(secret: Secret[Path]): F[StorageResult[Secret[RawSecretData]]]
-  def loadMeta(secret: Secret[Path]): F[StorageResult[Secret[Metadata]]]
-  def loadFully(secret: Secret[Path]): F[StorageResult[Secret[(RawSecretData, Metadata)]]]
+  def walkTree: F[RejectionOr[Node[Branch[Secret[RawStoreLocations]]]]]
 
-  def walkTree: F[StorageResult[Node[Branch[Secret[RawStoreLocations]]]]]
-
-
-
+@experimental
 object LocalStorage:
 
-  def make[F[_]: Sync](home: String): LocalStorage[F] =
-    val ctx = new StorageCtx:
-      override def repoDir: Path = java.nio.file.Path.of(home)
-      override def resolve(file: String): Path =
-        java.nio.file.Path.of(home, file)
-    Impl[F](ctx)
+  def make[F[_]: Async: Logger](
+      config: RepositoryConfiguration,
+      cs: CypherService[F]): LocalStorage[F] =
+    val gitted: LocalStorage[Mid[F, *]] = Gitted[F](config.repoDir)
+    val lcs: LocalStorage[Mid[F, *]]    = CypheredStorage[F](cs)
+    (gitted |+| lcs) attach Impl[F](config.repoDir)
+
+  class CypheredStorage[F[_]: Async: Logger](cs: CypherService[F]) extends LocalStorage[Mid[F, *]] {
+
+    override def create(name: SecretName, payload: RawSecretData, meta: Metadata): Mid[F, RejectionOr[Secret[RawStoreLocations]]] =
+      identity
+
+    override def update(name: SecretName, payload: RawSecretData, meta: Metadata): Mid[F, RejectionOr[Secret[RawStoreLocations]]] =
+      identity
+
+    override def loadPayload(secret: Secret[Path]): Mid[F, RejectionOr[Secret[RawSecretData]]] =
+      action =>
+        (for
+          d <- EitherT(action)
+          r <- cs.decrypt(d.payload.byteArray).liftTo[Err]
+        yield d.copy(payload = RawSecretData.from(r))).value
+
+    override def loadMeta(secret: Secret[Path]): Mid[F, RejectionOr[Secret[Metadata]]] = ???
+
+    override def loadFully(secret: Secret[RawStoreLocations]): Mid[F, RejectionOr[Secret[(RawSecretData, Metadata)]]] =
+      action =>
+        (for
+          d: Secret[(RawSecretData, Metadata)] <- EitherT(action)
+          r                                    <- cs.decrypt(d.payload._1.byteArray).liftTo[Err]
+        yield d.copy(payload = (RawSecretData.from(r), d.payload._2))).value
+
+    override def walkTree: Mid[F, RejectionOr[Node[Branch[Secret[RawStoreLocations]]]]] = identity
+
+  }
+
+  class Gitted[F[_]: Sync](repoDir: Path) extends LocalStorage[Mid[F, *]] {
+
+    override def create(name: SecretName, payload: RawSecretData, meta: Metadata): Mid[F, RejectionOr[Secret[RawStoreLocations]]] =
+      action => {
+        GitRepo.openExists(repoDir).use { git =>
+          val commitMsg = s"Add secret $name at ${sys.env.getOrElse("HOST_NAME", "")}"
+          (for
+            locations <- EitherT(action)
+            files = NonEmptyList.of(locations.payload.secretData, locations.payload.metadata)
+            _ <- git.commitFiles(files, commitMsg).liftTo[Err]
+          yield locations).value
+        }
+      }
+
+    override def update(name: SecretName, payload: RawSecretData, meta: Metadata): Mid[F, RejectionOr[Secret[RawStoreLocations]]] =
+      action => {
+        GitRepo.openExists(repoDir).use { git =>
+          val commitMsg = s"Update secret $name at ${sys.env.getOrElse("HOST_NAME", "")}"
+          (for
+            locations <- EitherT(action)
+            files = NonEmptyList.of(locations.payload.secretData, locations.payload.metadata)
+            _ <- git.commitFiles(files, commitMsg).liftTo[Err]
+          yield locations).value
+        }
+      }
+
+    override def loadPayload(secret: Secret[Path]): Mid[F, RejectionOr[Secret[RawSecretData]]] =
+      action => GitRepo.openExists(repoDir).use(_.verify).liftTo[Err].flatMapF(_ => action).value
+
+    override def loadMeta(secret: Secret[Path]): Mid[F, RejectionOr[Secret[Metadata]]] =
+      action => GitRepo.openExists(repoDir).use(_.verify).liftTo[Err].flatMapF(_ => action).value
+
+    override def loadFully(secret: Secret[RawStoreLocations]): Mid[F, RejectionOr[Secret[(RawSecretData, Metadata)]]] =
+      action => GitRepo.openExists(repoDir).use(_.verify).liftTo[Err].flatMapF(_ => action).value
+
+    override def walkTree: Mid[F, RejectionOr[Node[Branch[Secret[RawStoreLocations]]]]] =
+      action => GitRepo.openExists(repoDir).use(_.verify).liftTo[Err].flatMapF(_ => action).value
+
+  }
 
   class Impl[F[_]](
-      using
-      F: Sync[F]
-    )(ctx: StorageCtx)
+      repoDir: Path
+    )(using
+      F: Sync[F])
       extends LocalStorage[F]:
 
     import F.blocking
     import StandardOpenOption.*
 
-    override def repoDir(): F[StorageResult[Path]] = ctx.repoDir.asRight.pure
-
-    override def walkTree: F[StorageResult[Node[Branch[Secret[RawStoreLocations]]]]] =
+    override def walkTree: F[RejectionOr[Node[Branch[Secret[RawStoreLocations]]]]] =
       def mapBranch: Entry => Branch[Secret[RawStoreLocations]] =
         case Entry(dir, Chain.nil) => Branch.Empty(dir)
         case Entry(dir, files) =>
           (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
             case (Some(meta), Some(payload)) =>
-              val name = SecretName.of(ctx.repoDir.relativize(dir).toString)
+              val name = SecretName.of(repoDir.relativize(dir).toString)
               Branch.Solid(dir, Secret(name, RawStoreLocations(payload, meta)))
             case _ => Branch.Empty(dir)
 
       for
-        tree <- blocking(walkFileTree(ctx.repoDir, exceptDir = _.endsWith(".git")))
+        tree <- blocking(
+                  walkFileTree(repoDir, exceptDir = p => p.endsWith(".git") || p.endsWith(".repo"))
+                )
         tr = tree.traverse(v => Id(mapBranch(v)))
       yield tr.asRight
 
-    override def loadMeta(secret: Secret[Path]): F[StorageResult[Secret[Metadata]]] =
+    override def loadMeta(secret: Secret[Path]): F[RejectionOr[Secret[Metadata]]] =
       val metaPath = secret.payload
 
       blocking(Files.exists(metaPath)).flatMap { exists =>
-        if !exists then
-          StorageErr.FileNotFound(metaPath, secret.name).asLeft[Secret[Metadata]].pure[F]
+        if !exists then Err.StorageCorrupted(metaPath).asLeft[Secret[Metadata]].pure[F]
         else
           for raw <- blocking(Files.readString(metaPath))
           yield Metadata
             .fromString(raw)
-            .bimap(_ => StorageErr.MetadataFileCorrupted(metaPath, secret.name),
-                   Secret(secret.name, _)
-            )
+            .bimap(_ => Err.StorageCorrupted(metaPath), Secret(secret.name, _))
       }
 
-    override def loadFully(secret: Secret[Path]): F[StorageResult[Secret[(RawSecretData, Metadata)]]] =
+    override def loadFully(secret: Secret[RawStoreLocations]): F[RejectionOr[Secret[(RawSecretData, Metadata)]]] =
       for
-        p <- loadPayload(secret)
-        m <- loadMeta(secret)
+        p <- loadPayload(secret.map(_.secretData))
+        m <- loadMeta(secret.map(_.metadata))
       yield (p, m).mapN((a, b) => Secret(a.name, (a.payload, b.payload)))
 
-    override def loadPayload(secret: Secret[Path]): F[StorageResult[Secret[RawSecretData]]] =
+    override def loadPayload(secret: Secret[Path]): F[RejectionOr[Secret[RawSecretData]]] =
       val path = secret.payload
 
       blocking(Files.exists(path)).flatMap { exists =>
-        if !exists then
-          StorageErr.FileNotFound(path, secret.name).asLeft[Secret[RawSecretData]].pure[F]
+        if !exists then Err.StorageCorrupted(path).asLeft[Secret[RawSecretData]].pure[F]
         else
           for raw <- blocking(Files.readAllBytes(path))
           yield Secret(secret.name, RawSecretData.from(raw)).asRight
       }
 
-    override def create(name: SecretName, payload: RawSecretData, meta: Metadata): F[StorageResult[Secret[RawStoreLocations]]] =
-      val path = ctx.resolve(name)
+    override def create(name: SecretName, payload: RawSecretData, meta: Metadata): F[RejectionOr[Secret[RawStoreLocations]]] =
+      val path = repoDir.resolve(name)
 
       val metaPath    = path.resolve("meta")
       val payloadPath = path.resolve("payload")
 
       blocking(Files.exists(path) && Files.exists(payloadPath)).flatMap { rootExists =>
-        if rootExists then StorageErr.DirAlreadyExists(path, name).asLeft.pure[F]
+        if rootExists then Err.AlreadyExists(name).asLeft.pure[F]
         else
           for
             _ <- blocking(Files.createDirectories(path))
@@ -121,14 +193,14 @@ object LocalStorage:
           yield Secret(name, RawStoreLocations(payloadPath, metaPath)).asRight
       }
 
-    override def update(name: SecretName, payload: RawSecretData, metadata: Metadata): F[StorageResult[Secret[RawStoreLocations]]] =
-      val path = ctx.resolve(name)
+    override def update(name: SecretName, payload: RawSecretData, metadata: Metadata): F[RejectionOr[Secret[RawStoreLocations]]] =
+      val path = repoDir.resolve(name)
 
       val metaPath    = path.resolve("meta")
       val payloadPath = path.resolve("payload")
 
       blocking(Files.exists(path) && Files.exists(metaPath)).flatMap { exists =>
-        if !exists then StorageErr.FileNotFound(metaPath, name).asLeft.pure[F]
+        if !exists then Err.StorageCorrupted(metaPath).asLeft.pure[F]
         else
           for
             _ <- blocking(Files.write(payloadPath, payload.byteArray, StandardOpenOption.WRITE))

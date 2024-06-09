@@ -32,8 +32,8 @@ enum Err:
   case InternalErr
 
 object Err:
-  given Upcast[Err, GitError]     = fromGitError(_)
-  given Upcast[Err, StorageErr]   = fromStorageErr(_)
+  given Upcast[Err, GitError] = fromGitError(_)
+  // given Upcast[Err, StorageErr]   = fromStorageErr(_)
   given Upcast[Err, Unit]         = _ => Err.CypherErr
   given Upcast[Err, RepoMetaErr]  = _ => Err.InternalErr
   given Upcast[Err, ProvisionErr] = _ => Err.InternalErr
@@ -43,13 +43,6 @@ object Err:
       case GitError.RepositoryNotFound(path) => Err.StorageNotInitialized(path)
       case GitError.RepositoryIsDirty        => Err.InconsistentStorage("repo is dirty")
       case GitError.UnexpectedError          => Err.InternalErr
-
-  private def fromStorageErr(se: StorageErr): Err =
-    se match
-      case StorageErr.NotInitialized            => Err.InternalErr
-      case StorageErr.FileNotFound(path, name)  => Err.InconsistentStorage(s"file not found $path")
-      case StorageErr.DirAlreadyExists(_, name) => Err.AlreadyExists(name)
-      case StorageErr.MetadataFileCorrupted(path, _) => Err.StorageCorrupted(path)
 end Err
 
 trait Command[F[_]]:
@@ -77,10 +70,10 @@ object Command:
     override def initWithPath(repoDir: Path, version: SemVer, alg: CryptoAlg): F[RejectionOr[StorageView]] =
       val provisioner = RepositoryProvisioner.make(repoDir)
       val config      = RepositoryMetaConfig(SemVer.zero, alg)
-      provisioner.provision(config).liftTo[Err].map(_ => StorageView(repoDir)).value
+      provisioner.provision(config).liftE[Err].map(_ => StorageView(repoDir)).value
 
     override def filter(filter: SecretFilter, config: RepositoryConfiguration): F[RejectionOr[Option[Node[Branch[SecretView]]]]] =
-      def predicate(s: Secret[(RawSecretData, Metadata)]): Boolean =
+      def predicate(s: SecretPacket[(RawSecretData, Metadata)]): Boolean =
         filter match
           case SecretFilter.Predicate(pattern) =>
             s.name.contains(pattern)
@@ -89,16 +82,16 @@ object Command:
 
       CypherService
         .make(config.cryptoAlg)
-        .liftTo[Err]
+        .liftE[Err]
         .flatMap { cs =>
           val ls = LocalStorage.make(config, cs)
 
           for
-            rawTree <- ls.walkTree.liftTo[Err]
+            rawTree <- ls.walkTree.liftE[Err]
             tree <- rawTree.traverse:
                       case Branch.Empty(dir) => EitherT.pure(Branch.Empty(dir))
                       case Branch.Solid(dir, s) =>
-                        ls.loadFully(s).liftTo[Err].map(m => Branch.Solid(dir, m))
+                        ls.loadFully(s).liftE[Err].map(m => Branch.Solid(dir, m))
           yield cutTree(tree, predicate)
             .map(
               _.traverse(b =>
@@ -120,21 +113,13 @@ object Command:
         payload: SecretPayload,
         meta: Metadata,
         config: RepositoryConfiguration): F[RejectionOr[SecretView]] =
-//      def addNewSecret(git: GitRepo[F], secret: Secret[RawSecretData]) = // todo use saga
-//        val commitMsg = s"Create secret $name at ${sys.env.getOrElse("HOST_NAME", "")}"
-//        for
-//          locations <- ls.create(secret.name, secret.payload, meta).liftTo[Err]
-//          files = NonEmptyList.of(locations.payload.secretData, locations.payload.metadata)
-//          _ <- git.commitFiles(files, commitMsg).liftTo[Err]
-//        yield SecretView(locations.name, MetadataView(meta))
-
       val result =
         for
-          cs   <- CypherService.make(config.cryptoAlg).liftTo[Err]
-          data <- cs.encrypt(payload.rawData).liftTo[Err]
-          secret = Secret(name, RawSecretData.from(data))
+          cs   <- CypherService.make(config.cryptoAlg).liftE[Err]
+          data <- cs.encrypt(payload.rawData).liftE[Err]
+          secret = SecretPacket(name, RawSecretData.from(data))
           locations <-
-            LocalStorage.make(config, cs).create(secret.name, secret.payload, meta).liftTo[Err]
+            LocalStorage.make(config, cs).create(secret.name, secret.payload, meta).liftE[Err]
         yield SecretView(locations.name, MetadataView(meta))
 
       result.value
@@ -143,41 +128,25 @@ object Command:
         name: SecretName,
         payload: Option[SecretPayload],
         meta: Option[Metadata],
-        config: RepositoryConfiguration): F[RejectionOr[SecretView]] = ???
-//      val ls = LocalStorage.make(config)
-//
-//      def updateExists(
-//          git: GitRepo[F],
-//          secret: Secret[(RawSecretData, Metadata)]) = // todo use saga
-//        val commitMsg = s"Update secret $name at ${sys.env.getOrElse("HOST_NAME", "")}"
-//        for
-//          locations <- ls.update(secret.name, secret.payload._1, secret.payload._2).liftTo[Err]
-//          files = NonEmptyList.of(locations.payload.secretData, locations.payload.metadata)
-//          _       <- git.commitFiles(files, commitMsg).liftTo[Err]
-//          updated <- ls.loadMeta(locations.map(_.metadata)).liftTo[Err]
-//        yield SecretView(updated.name, MetadataView(updated.payload))
-//
-//      val result =
-//        for
-//          catalog <- ls.walkTree.liftTo[Err]
-//          exists <- catalog
-//                      .find(_.fold(false, _.name == name))
-//                      .flatMap(_.toOption)
-//                      .toRight(Err.SecretNotFound(name))
-//                      .toEitherT
-//
-//          toUpdate <-
-//            (ls.loadPayload(exists.map(_.secretData)).liftTo[Err],
-//             ls.loadMeta(exists.map(_.metadata)).liftTo[Err]
-//            )
-//              .mapN((rawSecret, rawMeta) =>
-//                (payload.map(p => RawSecretData.from(p.rawData)).getOrElse(rawSecret.payload),
-//                 meta.getOrElse(rawMeta.payload)
-//                )
-//              )
-//          r <-
-//            GitRepo.openExists(config.repoDir).use(updateExists(_, Secret(name, toUpdate)).value).liftTo[Err]
-//        yield r
-//
-//      result.value
+        config: RepositoryConfiguration): F[RejectionOr[SecretView]] =
+      val result =
+        for
+          cs <- CypherService.make(config.cryptoAlg).liftE[Err]
+          ls = LocalStorage.make(config, cs)
+          catalog <- ls.walkTree.liftE[Err]
+          exists <- catalog
+                      .find(_.fold(false, _.name == name))
+                      .flatMap(_.toOption)
+                      .toRight(Err.SecretNotFound(name))
+                      .toEitherT
+
+          toUpdate <- ls.loadFully(exists).liftE[Err]
+
+          rsd = payload.map(_.rawData).getOrElse(toUpdate.payload._1.byteArray)
+          sec <- cs.encrypt(rsd).liftE[Err]
+          metadata = meta.getOrElse(toUpdate.payload._2)
+          locations <- ls.update(name, RawSecretData.from(sec), metadata).liftE[Err]
+        yield SecretView(locations.name, MetadataView(metadata))
+
+      result.value
 end Command

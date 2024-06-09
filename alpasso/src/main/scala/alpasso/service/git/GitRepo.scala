@@ -22,7 +22,6 @@ enum GitError extends Throwable with NoStackTrace:
   case UnexpectedError
 
 trait GitRepo[F[_]]:
-  def info: F[Path]
   def verify: F[Either[GitError, Unit]]
   def commitFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]]
 
@@ -75,8 +74,6 @@ object GitRepo:
     import F.blocking
 
     given Order[Path] = Order.fromComparable[Path]
-
-    override def info: F[Path] = blocking(repository.getWorkTree.toPath)
 
     override def verify: F[Either[GitError, Unit]] =
       verify_(repository)

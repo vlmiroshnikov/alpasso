@@ -1,6 +1,6 @@
 package alpasso.service.fs.repo
 
-import java.nio.file.{ Files, Path, Paths, StandardOpenOption }
+import java.nio.file.{ Files, Path, StandardOpenOption }
 
 import scala.annotation.experimental
 
@@ -21,7 +21,6 @@ import evo.derivation.*
 import evo.derivation.circe.*
 import evo.derivation.config.Config
 import io.circe.*
-import io.circe.derivation.*
 import io.circe.syntax.given
 import logstage.LogIO
 import logstage.LogIO.log
@@ -107,10 +106,13 @@ object RepositoryProvisioner:
             case Right(_) => log.info("Provisioning completed")
           }
 
-  class MetaProvisioner[F[_]: Sync](repoDir: Path) extends Provisioner[F]:
+  class MetaProvisioner[F[_]](
+      using
+      F: Sync[F]
+    )(repoDir: Path)
+      extends Provisioner[F]:
     private val fullPath = repoDir.resolve(repoMetadataFile)
-    val S                = Sync[F]
-    import S.blocking
+    import F.blocking
 
     override def provision(config: RepositoryMetaConfig): F[Either[ProvisionErr, Unit]] =
       blocking(Files.exists(repoDir)).flatMap { exists =>
@@ -126,22 +128,22 @@ object RepositoryProvisioner:
 enum RepoMetaErr:
   case NotInitialized, InvalidFormat
 
+@experimental
 object RepositoryConfigReader:
 
   def make[F[_]: Logger](
       repoDir: Path
     )(using
       F: Sync[F]): RepositoryConfigReader[F] = new RepositoryConfigReader[F]:
-    private val fullPath = repoDir.resolve(".repo")
+    private val fullPath = repoDir.resolve(RepositoryProvisioner.repoMetadataFile)
     import F.blocking
 
     def read: F[Either[RepoMetaErr, RepositoryMetaConfig]] =
       blocking(Files.exists(fullPath)).flatMap { exists =>
         if !exists then RepoMetaErr.NotInitialized.asLeft.pure[F]
-        else {
+        else
           for
             raw <- blocking(Files.readString(fullPath))
             ctx <- blocking(parser.parse(raw).flatMap(_.as[RepositoryMetaConfig]))
           yield ctx.leftMap(_ => RepoMetaErr.InvalidFormat)
-        }
       }

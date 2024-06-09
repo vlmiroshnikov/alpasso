@@ -33,7 +33,6 @@ enum Err:
 
 object Err:
   given Upcast[Err, GitError] = fromGitError(_)
-  // given Upcast[Err, StorageErr]   = fromStorageErr(_)
   given Upcast[Err, Unit]         = _ => Err.CypherErr
   given Upcast[Err, RepoMetaErr]  = _ => Err.InternalErr
   given Upcast[Err, ProvisionErr] = _ => Err.InternalErr

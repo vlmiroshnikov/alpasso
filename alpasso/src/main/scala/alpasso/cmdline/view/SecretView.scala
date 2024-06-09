@@ -12,5 +12,5 @@ case class SecretView(name: SecretName, metadata: MetadataView, payload: Option[
 object SecretView:
 
   given Show[SecretView] = Show.show(s =>
-    s" ${GREEN}${s.name}${RESET} {${s.metadata.show}} ${BLUE_B} ${s.payload}${RESET}"
+    s" ${GREEN}${s.name}${RESET} {${s.metadata.show}} ${BLUE_B} ${s.payload.getOrElse("******")}${RESET}"
   )

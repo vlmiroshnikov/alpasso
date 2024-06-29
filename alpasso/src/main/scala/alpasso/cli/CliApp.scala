@@ -34,7 +34,7 @@ object CliApp extends IOApp:
     val logger = IzLogger(levels = Map("org.eclipse.jgit" -> Level.Info))
 
     given LogIO[IO] = LogIO.fromLogger(logger)
-    // StaticLogRouter.instance.setup(logger.router)
+    //StaticLogRouter.instance.setup(logger.router)
 
     val rmr = RepositoryConfigReader.make[IO](repoDirDefault)
 
@@ -52,8 +52,8 @@ object CliApp extends IOApp:
 
     val r = (maybeAction, rmr.read).flatMapN {
       case (Some(Action.InitWithPath(path)), left) =>
-        // val gpg = CryptoAlg.Gpg("E59532DF27540224AF6A37CF0122EF2757E59DB9")
-        val gpg = CryptoAlg.Gpg("64695F7D212F979D3553AFC5E0D6CE10FBEB0423")
+        val gpg = CryptoAlg.Gpg("E59532DF27540224AF6A37CF0122EF2757E59DB9")
+        //val gpg = CryptoAlg.Gpg("64695F7D212F979D3553AFC5E0D6CE10FBEB0423")
         handle(cmd.initWithPath(path, SemVer.zero, gpg))
       case (Some(Action.CreateSecret(Some(name), Some(payload), tags)), Right(cfg)) =>
         val c = RepositoryConfiguration(repoDirDefault, cfg.version, cfg.cryptoAlg)
@@ -85,7 +85,7 @@ object CliApp extends IOApp:
 
       case (Some(Action.Daemon(_)), _) => runDaemon
       case v =>
-        IO.println(v.toString) *> IO.println(OParser.usage(parser, RenderingMode.TwoColumns))
+        IO.println(v.toString) *> runDaemon //*> IO.println(OParser.usage(parser, RenderingMode.TwoColumns))
     }
 
     r *> ExitCode.Success.pure[IO]

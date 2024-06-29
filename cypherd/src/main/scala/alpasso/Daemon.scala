@@ -150,8 +150,13 @@ object ServerRoutes:
 
 def runDaemon(using log: LogIO[IO]): IO[Unit] =
   val ec = scala.concurrent.ExecutionContext.global
-  Security.addProvider(new BouncyCastleProvider())
 
+
+  IO {
+    Security.addProvider(new BouncyCastleProvider())
+    val sp = Security.getProvider("BC")
+    println(sp)
+  } *>
   SessionStorage.make[IO].map(ServerAPI.make(_)).flatMap { api =>
     BlazeServerBuilder[IO]
       .withExecutionContext(ec)

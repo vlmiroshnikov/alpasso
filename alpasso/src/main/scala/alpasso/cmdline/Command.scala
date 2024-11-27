@@ -16,7 +16,7 @@ import alpasso.service.cypher.*
 import alpasso.service.fs.*
 import alpasso.service.fs.model.*
 import alpasso.service.fs.repo.model.{ CryptoAlg, RepositoryConfiguration, RepositoryMetaConfig }
-import alpasso.service.fs.repo.{ ProvisionErr, RepoMetaErr, RepositoryProvisioner }
+import alpasso.service.fs.repo.{ Logger, ProvisionErr, RepoMetaErr, RepositoryProvisioner }
 import alpasso.service.git.*
 import alpasso.shared.SemVer
 
@@ -32,7 +32,7 @@ enum Err:
   case InternalErr
 
 object Err:
-  given Upcast[Err, GitError] = fromGitError(_)
+  given Upcast[Err, GitError]     = fromGitError(_)
   given Upcast[Err, Unit]         = _ => Err.CypherErr
   given Upcast[Err, RepoMetaErr]  = _ => Err.InternalErr
   given Upcast[Err, ProvisionErr] = _ => Err.InternalErr
@@ -58,6 +58,7 @@ trait Command[F[_]]:
       payload: Option[SecretPayload],
       meta: Option[Metadata],
       config: RepositoryConfiguration): F[RejectionOr[SecretView]]
+
   def filter(filter: SecretFilter, config: RepositoryConfiguration): F[RejectionOr[Option[Node[Branch[SecretView]]]]]
 
 @experimental

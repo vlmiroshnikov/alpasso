@@ -19,8 +19,9 @@ import cats.tagless.syntax.*
 import alpasso.cmdline.Err
 import alpasso.common.syntax.*
 import alpasso.core.model.*
-import alpasso.service.cypher.{ CypherService, Logger }
+import alpasso.service.cypher.CypherService
 import alpasso.service.fs.model.*
+import alpasso.service.fs.repo.Logger
 import alpasso.service.fs.repo.model.{ CryptoAlg, RepositoryConfiguration }
 import alpasso.service.git.GitRepo
 
@@ -55,7 +56,8 @@ object LocalStorage:
 
     override def create(name: SecretName, payload: RawSecretData, meta: Metadata): Mid[F, RejectionOr[SecretPacket[RawStoreLocations]]] =
       identity
-
+      
+      
     override def update(name: SecretName, payload: RawSecretData, meta: Metadata): Mid[F, RejectionOr[SecretPacket[RawStoreLocations]]] =
       identity
 
@@ -106,17 +108,20 @@ object LocalStorage:
         }
       }
 
+    private val verifyGitRepo: EitherT[F, Err, Unit] =
+      GitRepo.openExists(repoDir).use(_.verify).liftE[Err]
+
     override def loadPayload(secret: SecretPacket[Path]): Mid[F, RejectionOr[SecretPacket[RawSecretData]]] =
-      action => GitRepo.openExists(repoDir).use(_.verify).liftE[Err].flatMapF(_ => action).value
+      action => verifyGitRepo.flatMapF(_ => action).value
 
     override def loadMeta(secret: SecretPacket[Path]): Mid[F, RejectionOr[SecretPacket[Metadata]]] =
-      action => GitRepo.openExists(repoDir).use(_.verify).liftE[Err].flatMapF(_ => action).value
+      action => verifyGitRepo.flatMapF(_ => action).value
 
     override def loadFully(secret: SecretPacket[RawStoreLocations]): Mid[F, RejectionOr[SecretPacket[(RawSecretData, Metadata)]]] =
-      action => GitRepo.openExists(repoDir).use(_.verify).liftE[Err].flatMapF(_ => action).value
+      action => verifyGitRepo.flatMapF(_ => action).value
 
     override def walkTree: Mid[F, RejectionOr[Node[Branch[SecretPacket[RawStoreLocations]]]]] =
-      action => GitRepo.openExists(repoDir).use(_.verify).liftE[Err].flatMapF(_ => action).value
+      action => verifyGitRepo.flatMapF(_ => action).value
 
   }
 

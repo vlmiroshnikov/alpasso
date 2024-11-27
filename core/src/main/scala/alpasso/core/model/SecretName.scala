@@ -9,4 +9,4 @@ object SecretName:
   def of(name: String): SecretName =
     Paths.get(name).normalize().toString
 
-  given Show[SecretName] = Show.show(identity)
+  given Show[SecretName] = Show.fromToString

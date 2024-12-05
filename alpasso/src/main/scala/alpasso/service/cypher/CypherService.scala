@@ -9,53 +9,56 @@ import cats.data.EitherT
 import cats.effect.*
 import cats.syntax.all.*
 
-import alpasso.service.fs.repo.Logger
+import alpasso.common.Logger
 import alpasso.service.fs.repo.model.CryptoAlg
 
 import logstage.LogIO
 import logstage.LogIO.log
 
+enum CypherError:
+  case InvalidCypher
+  case EncryptionError
+  case DecryptionError
+
+type Result[A] = Either[CypherError, A]
+
 trait CypherService[F[_]]:
-  def encrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]]
-  def decrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]]
+  def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]]
+  def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]]
 
 object CypherService:
 
-  private class GpgImpl[F[_]: Monad](fg: String) extends CypherService[F]:
+  private class GpgImpl[F[_]: Sync](fg: String) extends CypherService[F]:
 
-    private val silentLogger = ProcessLogger(fout => (), ferr => ())
+    private val silentLogger = ProcessLogger(fout => println(s"FOUT: ${fout}"), ferr => println(s"FERRL ${ferr}"))
 
-    override def encrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] =
+    override def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]] =
       val bis = ByteArrayInputStream(raw)
       val bos = ByteArrayOutputStream()
-      // gpg --encrypt --no-compress  --recipient
       val encrypt = Process("gpg", Seq("--encrypt", "--recipient", fg, "--armor")) #< bis #> bos
       encrypt.!(silentLogger)
 
       EitherT.pure(bos.toByteArray).value
 
-    override def decrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] =
+    override def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]] =
       val bis     = ByteArrayInputStream(raw)
       val bos     = ByteArrayOutputStream()
       val decrypt = Process("gpg", Seq("--decrypt", "--recipient", fg, "--armor")) #< bis #> bos
+
       decrypt.!(silentLogger)
 
       EitherT.pure(bos.toByteArray).value
 
   def empty[F[_]: Applicative]: CypherService[F] = new CypherService[F]:
-    override def encrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] = raw.asRight.pure
-    override def decrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] = raw.asRight.pure
+    override def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]] = raw.asRight.pure
+    override def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]] = raw.asRight.pure
 
-  def make[F[_]: Async: Logger](alg: CryptoAlg): F[Either[Unit, CypherService[F]]] = {
-    alg match
-      case CryptoAlg.Gpg(fg) => GpgImpl[F](fg).asRight.pure[F]
-      case CryptoAlg.Raw     => CypherService.empty.asRight.pure[F]
-  }
+  def gpg[F[_]: Sync: Logger](fg: String): CypherService[F] = GpgImpl[F](fg)
 
 @main
 def main(): Unit = {
 
-  val fg = "C7FE51E3A3790ABE0D9FD172DA874AB03CF06294"
+  val fg = "64695F7D212F979D3553AFC5E0D6CE10FBEB0423"
 
   val bis = ByteArrayInputStream("hello 123123123#$!!#!@@!#".getBytes)
   val bos = ByteArrayOutputStream()

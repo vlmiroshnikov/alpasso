@@ -14,7 +14,6 @@ import scopt.OParser
 enum SecretFilter:
   case Predicate(pattern: String)
   case All
-  case Empty
 
 enum OutputFormat:
   case Tree, Table

@@ -18,10 +18,10 @@ import cats.tagless.syntax.*
 
 import alpasso.cmdline.Err
 import alpasso.common.syntax.*
+import alpasso.common.{ Logger, RejectionOr }
 import alpasso.core.model.*
 import alpasso.service.cypher.CypherService
 import alpasso.service.fs.model.*
-import alpasso.service.fs.repo.Logger
 import alpasso.service.fs.repo.model.{ CryptoAlg, RepositoryConfiguration }
 import alpasso.service.git.GitRepo
 
@@ -31,58 +31,62 @@ import logstage.LogIO.log
 import tofu.higherKind.*
 import tofu.higherKind.Mid.{ attach, * }
 
-@experimental
-trait LocalStorage[F[_]] derives ApplyK:
+trait RepositoryMutator[F[_]] derives ApplyK:
   def create(name: SecretName, payload: RawSecretData, meta: Metadata): F[RejectionOr[SecretPacket[RawStoreLocations]]]
   def update(name: SecretName, payload: RawSecretData, meta: Metadata): F[RejectionOr[SecretPacket[RawStoreLocations]]]
 
-  def loadPayload(secret: SecretPacket[Path]): F[RejectionOr[SecretPacket[RawSecretData]]]
-  def loadMeta(secret: SecretPacket[Path]): F[RejectionOr[SecretPacket[Metadata]]]
-  def loadFully(secret: SecretPacket[RawStoreLocations]): F[RejectionOr[SecretPacket[(RawSecretData, Metadata)]]]
+object RepositoryMutator:
 
-  def walkTree: F[RejectionOr[Node[Branch[SecretPacket[RawStoreLocations]]]]]
+  def make[F[_]: Async: Logger](config: RepositoryConfiguration): RepositoryMutator[F] =
+    val gitted: RepositoryMutator[Mid[F, *]] = Gitted[F](config.repoDir)
+    (gitted) attach Impl[F](config.repoDir)
 
-@experimental
-object LocalStorage:
+  class Impl[F[_]: Logger](
+      repoDir: Path
+    )(using
+      F: Sync[F])
+      extends RepositoryMutator[F] {
 
-  def make[F[_]: Async: Logger](
-      config: RepositoryConfiguration,
-      cs: CypherService[F]): LocalStorage[F] =
-    val gitted: LocalStorage[Mid[F, *]] = Gitted[F](config.repoDir)
-    val lcs: LocalStorage[Mid[F, *]]    = CypheredStorage[F](cs)
-    (gitted |+| lcs) attach Impl[F](config.repoDir)
+    import F.blocking
+    import StandardOpenOption.*
 
-  class CypheredStorage[F[_]: Async: Logger](cs: CypherService[F]) extends LocalStorage[Mid[F, *]] {
+    override def create(name: SecretName, payload: RawSecretData, meta: Metadata): F[RejectionOr[SecretPacket[RawStoreLocations]]] =
+      val path = repoDir.resolve(name)
 
-    override def create(name: SecretName, payload: RawSecretData, meta: Metadata): Mid[F, RejectionOr[SecretPacket[RawStoreLocations]]] =
-      identity
-      
-      
-    override def update(name: SecretName, payload: RawSecretData, meta: Metadata): Mid[F, RejectionOr[SecretPacket[RawStoreLocations]]] =
-      identity
+      val metaPath    = path.resolve("meta")
+      val payloadPath = path.resolve("payload")
 
-    override def loadPayload(secret: SecretPacket[Path]): Mid[F, RejectionOr[SecretPacket[RawSecretData]]] =
-      action =>
-        (for
-          d <- EitherT(action)
-          r <- cs.decrypt(d.payload.byteArray).liftE[Err]
-        yield d.copy(payload = RawSecretData.from(r))).value
+      blocking(Files.exists(path) && Files.exists(payloadPath)).flatMap { rootExists =>
+        if rootExists then Err.AlreadyExists(name).asLeft.pure[F]
+        else
+          for
+            _ <- blocking(Files.createDirectories(path))
+            _ <- blocking(
+                   Files.write(payloadPath, payload.byteArray, CREATE_NEW, WRITE)
+                 )
+            _ <- blocking(
+                   Files.writeString(metaPath, meta.rawString, CREATE_NEW, WRITE)
+                 )
+          yield SecretPacket(name, RawStoreLocations(payloadPath, metaPath)).asRight
+      }
 
-    override def loadMeta(secret: SecretPacket[Path]): Mid[F, RejectionOr[SecretPacket[Metadata]]] =
-      identity
+    override def update(name: SecretName, payload: RawSecretData, metadata: Metadata): F[RejectionOr[SecretPacket[RawStoreLocations]]] =
+      val path = repoDir.resolve(name)
 
-    override def loadFully(secret: SecretPacket[RawStoreLocations]): Mid[F, RejectionOr[SecretPacket[(RawSecretData, Metadata)]]] =
-      action =>
-        (for
-          d: SecretPacket[(RawSecretData, Metadata)] <- EitherT(action)
-          r <- cs.decrypt(d.payload._1.byteArray).liftE[Err]
-        yield d.copy(payload = (RawSecretData.from(r), d.payload._2))).value
+      val metaPath    = path.resolve("meta")
+      val payloadPath = path.resolve("payload")
 
-    override def walkTree: Mid[F, RejectionOr[Node[Branch[SecretPacket[RawStoreLocations]]]]] =
-      identity
+      blocking(Files.exists(path) && Files.exists(metaPath)).flatMap { exists =>
+        if !exists then Err.StorageCorrupted(metaPath).asLeft.pure[F]
+        else
+          for
+            _ <- blocking(Files.write(payloadPath, payload.byteArray, StandardOpenOption.WRITE))
+            _ <- blocking(Files.writeString(metaPath, metadata.rawString, CREATE, WRITE))
+          yield SecretPacket(name, RawStoreLocations(payloadPath, metaPath)).asRight
+      }
   }
 
-  class Gitted[F[_]: Sync](repoDir: Path) extends LocalStorage[Mid[F, *]] {
+  class Gitted[F[_]: Sync](repoDir: Path) extends RepositoryMutator[Mid[F, *]] {
 
     override def create(name: SecretName, payload: RawSecretData, meta: Metadata): Mid[F, RejectionOr[SecretPacket[RawStoreLocations]]] =
       action => {
@@ -108,6 +112,50 @@ object LocalStorage:
         }
       }
 
+  }
+
+trait RepositoryReader[F[_]] derives ApplyK:
+  def loadPayload(secret: SecretPacket[Path]): F[RejectionOr[SecretPacket[RawSecretData]]]
+  def loadMeta(secret: SecretPacket[Path]): F[RejectionOr[SecretPacket[Metadata]]]
+  def loadFully(secret: SecretPacket[RawStoreLocations]): F[RejectionOr[SecretPacket[(RawSecretData, Metadata)]]]
+  def walkTree: F[RejectionOr[Node[Branch[SecretPacket[RawStoreLocations]]]]]
+
+@experimental
+object RepositoryReader:
+
+  def make[F[_]: Async: Logger](
+      config: RepositoryConfiguration,
+      cs: CypherService[F]): RepositoryReader[F] =
+    val gitted: RepositoryReader[Mid[F, *]] = Gitted[F](config.repoDir)
+    val lcs: RepositoryReader[Mid[F, *]]    = CypheredStorage[F](cs)
+    (gitted |+| lcs) attach Impl[F](config.repoDir)
+
+  class CypheredStorage[F[_]: Async: Logger](cs: CypherService[F])
+      extends RepositoryReader[Mid[F, *]] {
+
+    override def loadPayload(secret: SecretPacket[Path]): Mid[F, RejectionOr[SecretPacket[RawSecretData]]] =
+      action =>
+        (for
+          d <- EitherT(action)
+          r <- cs.decrypt(d.payload.byteArray).liftE[Err]
+        yield d.copy(payload = RawSecretData.from(r))).value
+
+    override def loadMeta(secret: SecretPacket[Path]): Mid[F, RejectionOr[SecretPacket[Metadata]]] =
+      identity
+
+    override def loadFully(secret: SecretPacket[RawStoreLocations]): Mid[F, RejectionOr[SecretPacket[(RawSecretData, Metadata)]]] =
+      action =>
+        (for
+          d: SecretPacket[(RawSecretData, Metadata)] <- EitherT(action)
+          r <- cs.decrypt(d.payload._1.byteArray).liftE[Err]
+        yield d.copy(payload = (RawSecretData.from(r), d.payload._2))).value
+
+    override def walkTree: Mid[F, RejectionOr[Node[Branch[SecretPacket[RawStoreLocations]]]]] =
+      identity
+  }
+
+  class Gitted[F[_]: Sync](repoDir: Path) extends RepositoryReader[Mid[F, *]] {
+
     private val verifyGitRepo: EitherT[F, Err, Unit] =
       GitRepo.openExists(repoDir).use(_.verify).liftE[Err]
 
@@ -129,8 +177,7 @@ object LocalStorage:
       repoDir: Path
     )(using
       F: Sync[F])
-      extends LocalStorage[F]:
-
+      extends RepositoryReader[F]:
     import F.blocking
     import StandardOpenOption.*
 
@@ -179,41 +226,7 @@ object LocalStorage:
           yield SecretPacket(secret.name, RawSecretData.from(raw)).asRight
       }
 
-    override def create(name: SecretName, payload: RawSecretData, meta: Metadata): F[RejectionOr[SecretPacket[RawStoreLocations]]] =
-      val path = repoDir.resolve(name)
-
-      val metaPath    = path.resolve("meta")
-      val payloadPath = path.resolve("payload")
-
-      blocking(Files.exists(path) && Files.exists(payloadPath)).flatMap { rootExists =>
-        if rootExists then Err.AlreadyExists(name).asLeft.pure[F]
-        else
-          for
-            _ <- blocking(Files.createDirectories(path))
-            _ <- blocking(
-                   Files.write(payloadPath, payload.byteArray, CREATE_NEW, WRITE)
-                 )
-            _ <- blocking(
-                   Files.writeString(metaPath, meta.rawString, CREATE_NEW, WRITE)
-                 )
-          yield SecretPacket(name, RawStoreLocations(payloadPath, metaPath)).asRight
-      }
-
-    override def update(name: SecretName, payload: RawSecretData, metadata: Metadata): F[RejectionOr[SecretPacket[RawStoreLocations]]] =
-      val path = repoDir.resolve(name)
-
-      val metaPath    = path.resolve("meta")
-      val payloadPath = path.resolve("payload")
-
-      blocking(Files.exists(path) && Files.exists(metaPath)).flatMap { exists =>
-        if !exists then Err.StorageCorrupted(metaPath).asLeft.pure[F]
-        else
-          for
-            _ <- blocking(Files.write(payloadPath, payload.byteArray, StandardOpenOption.WRITE))
-            _ <- blocking(Files.writeString(metaPath, metadata.rawString, CREATE, WRITE))
-          yield SecretPacket(name, RawStoreLocations(payloadPath, metaPath)).asRight
-      }
-end LocalStorage
+end RepositoryReader
 
 case class Entry(path: Path, files: Chain[Path] = Chain.nil)
 

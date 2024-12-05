@@ -12,10 +12,10 @@ import cats.tagless.*
 import cats.tagless.derived.*
 import cats.tagless.syntax.*
 
+import alpasso.common.{ Logger, SemVer }
 import alpasso.service.cypher.CypherService
 import alpasso.service.fs.repo.model.{ CryptoAlg, RepositoryConfiguration, RepositoryMetaConfig }
 import alpasso.service.git.GitRepo
-import alpasso.shared.SemVer
 
 import evo.derivation.*
 import evo.derivation.circe.*
@@ -26,8 +26,6 @@ import logstage.LogIO
 import logstage.LogIO.log
 import tofu.higherKind.*
 import tofu.higherKind.Mid.*
-
-case class RootPathConfig(current: Path)
 
 object model:
 
@@ -41,8 +39,6 @@ object model:
 
   @SnakeCase
   case class RepositoryMetaConfig(version: SemVer, cryptoAlg: CryptoAlg) derives Config, EvoCodec
-
-type Logger[F[_]] = LogIO[F]
 
 trait RepositoryConfigReader[F[_]]:
   def read: F[Either[RepoMetaErr, RepositoryMetaConfig]]
@@ -58,9 +54,9 @@ trait Provisioner[F[_]] derives ApplyK:
 object RepositoryProvisioner:
   import StandardOpenOption.*
 
-  val repoMetadataFile: String = ".repo"
+  val repoMetadataFile: String = ".alpasso"
 
-  def make[F[_]: Logger: Async](repoDir: Path): Provisioner[F] =
+  def make[F[_]: Logger: Sync](repoDir: Path): Provisioner[F] =
     val alg = MetaProvisioner(repoDir)
 
     val gitted: Provisioner[Mid[F, *]] = GitProvisioner[F](repoDir)
@@ -69,14 +65,16 @@ object RepositoryProvisioner:
 
     (cs |+| gitted |+| logged) attach alg
 
-  class CypherProvisioner[F[_]: Async: Logger] extends Provisioner[Mid[F, *]] {
+  class CypherProvisioner[F[_]: Sync: Logger] extends Provisioner[Mid[F, *]] {
 
     override def provision(config: RepositoryMetaConfig): Mid[F, Either[ProvisionErr, Unit]] = {
       action =>
+        val cs = config.cryptoAlg match
+          case CryptoAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
+          case CryptoAlg.Raw              => CypherService.empty
         (for
-          cs <- EitherT(CypherService.make(config.cryptoAlg)).leftMap(_ => ProvisionErr.Undefined)
-          _  <- EitherT.liftF(cs.encrypt(Array[Byte](1)))
-          r  <- EitherT(action)
+          _ <- EitherT.liftF(cs.encrypt(Array[Byte](1)))
+          r <- EitherT(action)
         yield r).value
     }
   }

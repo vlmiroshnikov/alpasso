@@ -16,6 +16,7 @@ object Settings {
     scalacOptions ++= Seq("-deprecation",
                           "-new-syntax",
                           "-Ykind-projector",
+                          "-experimental",
                           "-Wconf:msg=eta-expanded even though:silent"
     )
   )

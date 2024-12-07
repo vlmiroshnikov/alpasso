@@ -49,7 +49,9 @@ object SessionManager:
         yield ctx.toOption
 
     def write(data: SessionData): F[Unit] =
-      blocking(Files.writeString(sessionFile, data.asJson.spaces2, CREATE, TRUNCATE_EXISTING, WRITE))
+      blocking(
+        Files.writeString(sessionFile, data.asJson.spaces2, CREATE, TRUNCATE_EXISTING, WRITE)
+      )
 
     def modify(f: SessionData => SessionData): F[Unit] =
       OptionT(readData()).cata(f(empty), f) >>= write
@@ -58,7 +60,9 @@ object SessionManager:
       readData().map(_.map(_.sessions).getOrElse(Nil))
 
     override def append(session: Session): F[Unit] =
-      modify(old => SessionData(current = session.some, sessions = (session :: old.sessions).distinct))
+      modify(old =>
+        SessionData(current = session.some, sessions = (session :: old.sessions).distinct)
+      )
 
     override def current(): F[Option[Session]] =
       readData().map(_.flatMap(_.current))

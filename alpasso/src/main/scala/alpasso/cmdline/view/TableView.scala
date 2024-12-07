@@ -3,7 +3,7 @@ package alpasso.cmdline.view
 import cats.*
 import cats.syntax.all.*
 
-case class TableRowView[R](id: Int, data: R)
+case class TableRowView[+R](id: Int, data: R)
 
 case class TableView[R](rows: List[TableRowView[R]])
 
@@ -16,11 +16,15 @@ object TableView:
   }
 
 enum SecretFilter:
-  case Predicate(pattern: String)
-  case All
+  case Grep(pattern: String)
+  case Empty
 
 enum OutputFormat:
   case Tree, Table
 
 object OutputFormat:
+
+  def withNameInvariant(s: String): Option[OutputFormat] =
+    OutputFormat.values.find(_.toString.toLowerCase == s)
+
   given Show[OutputFormat] = Show.show(_.toString.toLowerCase)

@@ -1,12 +1,13 @@
 package alpasso.cmdline
 
-import alpasso.cli.Cypher
-
 import java.nio.file.Path
+
 import cats.*
 import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
+
+import alpasso.cli.Cypher
 import alpasso.cmdline.view.*
 import alpasso.common.syntax.*
 import alpasso.common.{Logger, Result, SemVer}
@@ -18,6 +19,7 @@ import alpasso.service.fs.repo.model.CryptoAlg.Gpg
 import alpasso.service.fs.repo.model.{CryptoAlg, RepositoryConfiguration, RepositoryMetaConfig}
 import alpasso.service.fs.repo.{ProvisionErr, RepoMetaErr, RepositoryProvisioner}
 import alpasso.service.git.*
+
 import glass.*
 
 enum Err:
@@ -46,10 +48,10 @@ end Err
 
 def bootstrap[F[_]: Sync: Logger](repoDir: Path, version: SemVer, cypher: Cypher): F[Result[StorageView]] =
   val provisioner = RepositoryProvisioner.make(repoDir)
-  val alg   = cypher match 
+  val alg = cypher match
     case Cypher.Gpg(fingerprint) => CryptoAlg.Gpg(fingerprint)
-    
-  val config      = RepositoryMetaConfig(version, alg)
+
+  val config = RepositoryMetaConfig(version, alg)
   provisioner.provision(config).liftE[Err].map(_ => StorageView(repoDir)).value
 
 trait Command[F[_]]:
@@ -86,8 +88,8 @@ object Command:
     override def filter(filter: SecretFilter): F[Result[Option[Node[Branch[SecretView]]]]] =
       def predicate(s: SecretPacket[(RawSecretData, RawMetadata)]): Boolean =
         filter match
-          case SecretFilter.Predicate(pattern) => s.name.contains(pattern)
-          case SecretFilter.All                => true
+          case SecretFilter.Grep(pattern) => s.name.contains(pattern)
+          case SecretFilter.Empty => true
 
       (for
         rawTree <- reader.walkTree.liftE[Err]

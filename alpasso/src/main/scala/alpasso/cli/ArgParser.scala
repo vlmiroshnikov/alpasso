@@ -4,14 +4,15 @@ import java.nio.file.Path
 
 import cats.syntax.all.*
 
+import alpasso.cmdline.view.{OutputFormat, SecretFilter}
 import alpasso.core.model.{ SecretMetadata, SecretName, SecretPayload }
-import alpasso.service.cypher.Recipient
 
 import com.monovore.decline.*
 
 enum Action:
   case Init(path: Option[Path], cypher: Cypher)
   case New(name: SecretName, secret: Option[SecretPayload], meta: Option[SecretMetadata])
+  case Filter(where: SecretFilter, format: OutputFormat)
 
 enum Cypher:
   case Gpg(fingerprint: String)
@@ -36,7 +37,18 @@ object ArgParser:
     (name, secret, tags).mapN(Action.New.apply)
   }
 
-  val command: Command[Action] = Command("alpasso", "header", true)(init orElse add)
+  val list: Opts[Action] = Opts.subcommand("ls", "List secrets") {
+    val grep = Opts.option[String]("grep", "Grep expression").map(SecretFilter.Grep.apply).orNone
+    val output = Opts
+      .option[String]("output", "Table | Tree", "o")
+      .map(s => OutputFormat.withNameInvariant(s).getOrElse(OutputFormat.Tree))
+      .orNone
+    (grep, output).mapN((v, o) =>
+      Action.Filter(v.getOrElse(SecretFilter.Empty), o.getOrElse(OutputFormat.Tree))
+    )
+  }
+
+  val command: Command[Action] = Command("alpasso", "header", true)(init orElse add orElse list)
 
 @main
 def parse(): Unit = {
@@ -47,5 +59,7 @@ def parse(): Unit = {
     )
 
   val add = ArgParser.command.parse(Seq("new", ""))
-  println(add)
+
+  val ls = ArgParser.command.parse(Seq("ls", "--grep", "proton"))
+  println(ls)
 }

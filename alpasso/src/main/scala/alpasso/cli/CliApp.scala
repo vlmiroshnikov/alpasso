@@ -14,16 +14,13 @@ import alpasso.cmdline.view.*
 import alpasso.common.syntax.*
 import alpasso.common.{ Result, SemVer }
 import alpasso.core.model.*
-import alpasso.core.model.given
 import alpasso.service.fs.*
-import alpasso.service.fs.model.*
+import alpasso.service.fs.model.{Branch, given}
 import alpasso.service.fs.repo.RepositoryConfigReader
 import alpasso.service.fs.repo.model.{ CryptoAlg, RepositoryConfiguration }
 
-import logstage.{ IzLogger, Level, LogIO, StaticLogRouter }
-import scopt.{ OParser, RenderingMode }
+import logstage.{IzLogger, Level, LogIO}
 
-@experimental
 object CliApp extends IOApp:
 
   val repoDirDefault: Path = Paths.get(".local").toAbsolutePath
@@ -67,40 +64,20 @@ object CliApp extends IOApp:
       case Right(Action.New(sn, sp, sm)) =>
         provideCommand(_.create(sn, sp.getOrElse(SecretPayload.empty), sm)) >>= handle
 
-    //    val r = (maybeAction, rmr.read).flatMapN {
-    //      case (Some(Action.Init(path)), left) =>
-    //
-    //
-    //      case (Some(Action.CreateSecret(Some(name), Some(payload), tags)), Right(cfg)) =>
-    //        val c   = RepositoryConfiguration(repoDirDefault, cfg.version, cfg.cryptoAlg)
-    //        val cmd = Command.make[IO](c)
-    //        handle(cmd.create(SecretName.of(name), payload, Metadata.of(tags)))
-    //
-    //      case (Some(Action.UpdateSecret(Some(name), payload, tags)), Right(cfg)) =>
-    //        val c   = RepositoryConfiguration(repoDirDefault, cfg.version, cfg.cryptoAlg)
-    //        val cmd = Command.make[IO](c)
-    //        handle(cmd.update(SecretName.of(name), payload, tags.map(Metadata.of)))
-    //
-    //      case (Some(Action.FindSecrets(filter, format)), Right(cfg)) =>
-    //        val c   = RepositoryConfiguration(repoDirDefault, cfg.version, cfg.cryptoAlg)
-    //        val cmd = Command.make[IO](c)
-    //        format match
-    //          case OutputFormat.Tree =>
-    //            handle(cmd.filter(filter.getOrElse(SecretFilter.All)))
-    //          case OutputFormat.Table =>
-    //            val res = cmd.filter(filter.getOrElse(SecretFilter.All))
-    //            val r1 = res
-    //              .nested
-    //              .nested
-    //              .map { root =>
-    //                val v = root.foldLeft(List.empty[SecretView]):
-    //                  case (agg, Branch.Empty(_))    => agg
-    //                  case (agg, Branch.Solid(_, a)) => agg :+ a
-    //                TableView(v.mapWithIndex((s, i) => TableRowView(i, s)))
-    //              }
-    //              .value
-    //              .value
-    //            handle(r1)
-    //
-    //      case v => IO.println(v.toString)
-    //    }
+      case Right(Action.Filter(where, OutputFormat.Tree)) =>
+        provideCommand(_.filter(where)) >>= handle
+
+      case Right(Action.Filter(where, OutputFormat.Table)) =>
+        val res = provideCommand(_.filter(where))
+        val buildTableView = res
+          .nested
+          .nested
+          .map { root =>
+            val v = root.foldLeft(List.empty[SecretView]):
+              case (agg, Branch.Empty(_)) => agg
+              case (agg, Branch.Solid(_, a)) => agg :+ a
+            TableView(v.mapWithIndex((s, i) => TableRowView(i, s)))
+          }
+          .value
+          .value
+        buildTableView >>= handle

@@ -41,7 +41,7 @@ object model:
   case class RepositoryMetaConfig(version: SemVer, cryptoAlg: CryptoAlg) derives Config, EvoCodec
 
 trait RepositoryConfigReader[F[_]]:
-  def read: F[Either[RepoMetaErr, RepositoryMetaConfig]]
+  def read(path: Path): F[Either[RepoMetaErr, RepositoryMetaConfig]]
 
 enum ProvisionErr:
   case AlreadyExists, Undefined
@@ -126,22 +126,19 @@ object RepositoryProvisioner:
 enum RepoMetaErr:
   case NotInitialized, InvalidFormat
 
-@experimental
 object RepositoryConfigReader:
 
-  def make[F[_]: Logger](
-      repoDir: Path
-    )(using
-      F: Sync[F]): RepositoryConfigReader[F] = new RepositoryConfigReader[F]:
-    private val fullPath = repoDir.resolve(RepositoryProvisioner.repoMetadataFile)
-    import F.blocking
+  def make[F[_]: Sync: Logger]: RepositoryConfigReader[F] = (repoDir: Path) =>
+    val S = summon[Sync[F]]
+    import S.blocking
 
-    def read: F[Either[RepoMetaErr, RepositoryMetaConfig]] =
-      blocking(Files.exists(fullPath)).flatMap { exists =>
-        if !exists then RepoMetaErr.NotInitialized.asLeft.pure[F]
-        else
-          for
-            raw <- blocking(Files.readString(fullPath))
-            ctx <- blocking(parser.parse(raw).flatMap(_.as[RepositoryMetaConfig]))
-          yield ctx.leftMap(_ => RepoMetaErr.InvalidFormat)
-      }
+    val fullPath = repoDir.resolve(RepositoryProvisioner.repoMetadataFile)
+
+    blocking(Files.exists(fullPath)).flatMap { exists =>
+      if !exists then RepoMetaErr.NotInitialized.asLeft.pure[F]
+      else
+        for
+          raw <- blocking(Files.readString(fullPath))
+          ctx <- blocking(parser.parse(raw).flatMap(_.as[RepositoryMetaConfig]))
+        yield ctx.leftMap(_ => RepoMetaErr.InvalidFormat)
+    }

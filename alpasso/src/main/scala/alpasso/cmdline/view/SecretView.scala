@@ -7,7 +7,10 @@ import alpasso.core.model.*
 
 import Console.*
 
-case class SecretView(name: SecretName, metadata: MetadataView, payload: Option[String] = None)
+case class SecretView(
+    name: SecretName,
+    metadata: Option[MetadataView],
+    payload: Option[String] = None)
 
 object SecretView:
 

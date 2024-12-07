@@ -22,6 +22,8 @@ enum CypherError:
 
 type Result[A] = Either[CypherError, A]
 
+opaque type Recipient <: String = String
+
 trait CypherService[F[_]]:
   def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]]
   def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]]
@@ -30,11 +32,12 @@ object CypherService:
 
   private class GpgImpl[F[_]: Sync](fg: String) extends CypherService[F]:
 
-    private val silentLogger = ProcessLogger(fout => println(s"FOUT: ${fout}"), ferr => println(s"FERRL ${ferr}"))
+    private val silentLogger =
+      ProcessLogger(fout => println(s"FOUT: ${fout}"), ferr => println(s"FERRL ${ferr}"))
 
     override def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]] =
-      val bis = ByteArrayInputStream(raw)
-      val bos = ByteArrayOutputStream()
+      val bis     = ByteArrayInputStream(raw)
+      val bos     = ByteArrayOutputStream()
       val encrypt = Process("gpg", Seq("--encrypt", "--recipient", fg, "--armor")) #< bis #> bos
       encrypt.!(silentLogger)
 

@@ -1,25 +1,23 @@
 package alpasso.cmdline
 
+import alpasso.cli.Cypher
+
 import java.nio.file.Path
-
-import scala.annotation.experimental
-
 import cats.*
 import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
-
 import alpasso.cmdline.view.*
 import alpasso.common.syntax.*
-import alpasso.common.{ Logger, RejectionOr, SemVer }
+import alpasso.common.{Logger, Result, SemVer}
 import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
 import alpasso.service.fs.model.*
-import alpasso.service.fs.repo.model.{ CryptoAlg, RepositoryConfiguration, RepositoryMetaConfig }
-import alpasso.service.fs.repo.{ ProvisionErr, RepoMetaErr, RepositoryProvisioner }
+import alpasso.service.fs.repo.model.CryptoAlg.Gpg
+import alpasso.service.fs.repo.model.{CryptoAlg, RepositoryConfiguration, RepositoryMetaConfig}
+import alpasso.service.fs.repo.{ProvisionErr, RepoMetaErr, RepositoryProvisioner}
 import alpasso.service.git.*
-
 import glass.*
 
 enum Err:
@@ -30,6 +28,8 @@ enum Err:
   case SecretNotFound(name: SecretName)
   case CypherErr
   case InternalErr
+  case CommandSyntaxError(help: String)
+  case UseSwitchCommand
 
 object Err:
   given Upcast[Err, GitError]     = fromGitError
@@ -44,8 +44,11 @@ object Err:
       case GitError.UnexpectedError          => Err.InternalErr
 end Err
 
-def bootstrap[F[_]: Sync: Logger](repoDir: Path, version: SemVer, alg: CryptoAlg): F[RejectionOr[StorageView]] =
+def bootstrap[F[_]: Sync: Logger](repoDir: Path, version: SemVer, cypher: Cypher): F[Result[StorageView]] =
   val provisioner = RepositoryProvisioner.make(repoDir)
+  val alg   = cypher match 
+    case Cypher.Gpg(fingerprint) => CryptoAlg.Gpg(fingerprint)
+    
   val config      = RepositoryMetaConfig(version, alg)
   provisioner.provision(config).liftE[Err].map(_ => StorageView(repoDir)).value
 
@@ -54,16 +57,15 @@ trait Command[F[_]]:
   def create(
       name: SecretName,
       payload: SecretPayload,
-      meta: Metadata): F[RejectionOr[SecretView]]
+      meta: Option[SecretMetadata]): F[Result[SecretView]]
 
   def update(
       name: SecretName,
       payload: Option[SecretPayload],
-      meta: Option[Metadata]): F[RejectionOr[SecretView]]
+      meta: Option[SecretMetadata]): F[Result[SecretView]]
 
-  def filter(filter: SecretFilter): F[RejectionOr[Option[Node[Branch[SecretView]]]]]
+  def filter(filter: SecretFilter): F[Result[Option[Node[Branch[SecretView]]]]]
 
-@experimental
 object Command:
 
   def make[F[_]: Async: Logger](config: RepositoryConfiguration): Command[F] =
@@ -81,8 +83,8 @@ object Command:
       mutator: RepositoryMutator[F])
       extends Command[F]:
 
-    override def filter(filter: SecretFilter): F[RejectionOr[Option[Node[Branch[SecretView]]]]] =
-      def predicate(s: SecretPacket[(RawSecretData, Metadata)]): Boolean =
+    override def filter(filter: SecretFilter): F[Result[Option[Node[Branch[SecretView]]]]] =
+      def predicate(s: SecretPacket[(RawSecretData, RawMetadata)]): Boolean =
         filter match
           case SecretFilter.Predicate(pattern) => s.name.contains(pattern)
           case SecretFilter.All                => true
@@ -100,7 +102,7 @@ object Command:
             Id(
               b.map(sm =>
                 SecretView(sm.name,
-                           MetadataView(sm.payload._2),
+                           MetadataView(sm.payload._2.into()).some,
                            new String(sm.payload._1.byteArray).some
                 )
               )
@@ -111,19 +113,19 @@ object Command:
     override def create(
         name: SecretName,
         payload: SecretPayload,
-        meta: Metadata): F[RejectionOr[SecretView]] =
+        meta: Option[SecretMetadata]): F[Result[SecretView]] =
       val result =
         for
           data      <- cs.encrypt(payload.rawData).liftE[Err]
-          locations <- mutator.create(name, RawSecretData.from(data), meta).liftE[Err]
-        yield SecretView(locations.name, MetadataView(meta))
+          locations <- mutator.create(name, RawSecretData.from(data), RawMetadata.empty).liftE[Err]
+        yield SecretView(locations.name, meta.map(MetadataView(_)))
 
       result.value
 
     override def update(
         name: SecretName,
         payload: Option[SecretPayload],
-        meta: Option[Metadata]): F[RejectionOr[SecretView]] =
+        meta: Option[SecretMetadata]): F[Result[SecretView]] =
       val result =
         for
           catalog <- reader.walkTree.liftE[Err]
@@ -136,11 +138,11 @@ object Command:
           toUpdate <- reader.loadFully(exists).liftE[Err]
 
           rsd      = payload.map(_.rawData).getOrElse(toUpdate.payload._1.byteArray)
-          metadata = meta.getOrElse(toUpdate.payload._2)
+          metadata = meta.getOrElse(toUpdate.payload._2.into())
 
           sec       <- cs.encrypt(rsd).liftE[Err]
-          locations <- mutator.update(name, RawSecretData.from(sec), metadata).liftE[Err]
-        yield SecretView(locations.name, MetadataView(metadata))
+          locations <- mutator.update(name, RawSecretData.from(sec), RawMetadata.empty).liftE[Err]
+        yield SecretView(locations.name, None)
 
       result.value
 end Command

@@ -14,3 +14,13 @@ object TableView:
     val stroke = "|" + "-".repeat(56) + "|"
     (stroke +: rw :+ stroke).mkString("\n")
   }
+
+enum SecretFilter:
+  case Predicate(pattern: String)
+  case All
+
+enum OutputFormat:
+  case Tree, Table
+
+object OutputFormat:
+  given Show[OutputFormat] = Show.show(_.toString.toLowerCase)

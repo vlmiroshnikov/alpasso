@@ -10,14 +10,14 @@ import cats.syntax.all.*
 import alpasso.cli.Cypher
 import alpasso.cmdline.view.*
 import alpasso.common.syntax.*
-import alpasso.common.{Logger, Result, SemVer}
+import alpasso.common.{ Logger, Result, SemVer }
 import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
 import alpasso.service.fs.model.*
 import alpasso.service.fs.repo.model.CryptoAlg.Gpg
-import alpasso.service.fs.repo.model.{CryptoAlg, RepositoryConfiguration, RepositoryMetaConfig}
-import alpasso.service.fs.repo.{ProvisionErr, RepoMetaErr, RepositoryProvisioner}
+import alpasso.service.fs.repo.model.{ CryptoAlg, RepositoryConfiguration, RepositoryMetaConfig }
+import alpasso.service.fs.repo.{ ProvisionErr, RepoMetaErr, RepositoryProvisioner }
 import alpasso.service.git.*
 
 import glass.*
@@ -89,7 +89,7 @@ object Command:
       def predicate(s: SecretPacket[(RawSecretData, RawMetadata)]): Boolean =
         filter match
           case SecretFilter.Grep(pattern) => s.name.contains(pattern)
-          case SecretFilter.Empty => true
+          case SecretFilter.Empty         => true
 
       (for
         rawTree <- reader.walkTree.liftE[Err]

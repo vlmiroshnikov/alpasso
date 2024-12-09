@@ -11,19 +11,19 @@ import cats.syntax.all.*
 
 import alpasso.cmdline.*
 import alpasso.cmdline.view.*
+import alpasso.cmdline.view.SessionTableView.given
+import alpasso.cmdline.view.SessionView.given
 import alpasso.common.syntax.*
-import alpasso.common.{ Result, SemVer }
+import alpasso.common.{ Result, SemVer, Converter }
 import alpasso.core.model.*
 import alpasso.service.fs.*
-import alpasso.service.fs.model.{Branch, given}
+import alpasso.service.fs.model.{ Branch, given }
 import alpasso.service.fs.repo.RepositoryConfigReader
 import alpasso.service.fs.repo.model.{ CryptoAlg, RepositoryConfiguration }
 
-import logstage.{IzLogger, Level, LogIO}
+import logstage.{ IzLogger, Level, LogIO }
 
 object CliApp extends IOApp:
-
-  val repoDirDefault: Path = Paths.get(".local").toAbsolutePath
 
   override def run(args: List[String]): IO[ExitCode] =
 
@@ -57,9 +57,17 @@ object CliApp extends IOApp:
       case Left(help) =>
         handle(Err.CommandSyntaxError(help.toString).asLeft[Unit])
 
-      case Right(Action.Init(pathOpt, gpg)) =>
+      case Right(Action.Repo(RepoOps.Init(pathOpt, gpg))) =>
         val path = pathOpt.getOrElse(Path.of(".local").toAbsolutePath)
-        (bootstrap[IO](path, SemVer.zero, gpg) <* smgr.append(Session(path))) >>= handle
+        (bootstrap[IO](path, SemVer.zero, gpg) <* smgr.setup(Session(path))) >>= handle
+
+      case Right(Action.Repo(RepoOps.List)) =>
+        smgr.listAll().map(_.into().asRight[Err]) >>= handle
+
+      case Right(Action.Repo(RepoOps.Switch(sel))) =>
+        val switch = OptionT(smgr.listAll().map(_.zipWithIndex.find((_, idx) => idx == sel)))
+          .cataF(IO(Err.UseSwitchCommand.asLeft), (s, _) => smgr.setup(s).as(s.into().asRight[Err]))
+        switch >>= handle
 
       case Right(Action.New(sn, sp, sm)) =>
         provideCommand(_.create(sn, sp.getOrElse(SecretPayload.empty), sm)) >>= handle
@@ -74,7 +82,7 @@ object CliApp extends IOApp:
           .nested
           .map { root =>
             val v = root.foldLeft(List.empty[SecretView]):
-              case (agg, Branch.Empty(_)) => agg
+              case (agg, Branch.Empty(_))    => agg
               case (agg, Branch.Solid(_, a)) => agg :+ a
             TableView(v.mapWithIndex((s, i) => TableRowView(i, s)))
           }

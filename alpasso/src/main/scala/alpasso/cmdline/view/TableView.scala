@@ -1,5 +1,7 @@
 package alpasso.cmdline.view
 
+import alpasso.cli.Session
+import alpasso.common.Converter
 import cats.*
 import cats.syntax.all.*
 
@@ -28,3 +30,21 @@ object OutputFormat:
     OutputFormat.values.find(_.toString.toLowerCase == s)
 
   given Show[OutputFormat] = Show.show(_.toString.toLowerCase)
+
+case class SessionView(shortcut: String, path: String)
+object SessionView :
+  given Converter[Session, SessionView] = s => SessionView(s.path.getFileName.toString, s.path.toString)
+  given Show[SessionView] = Show.show(s => s"${s.shortcut.show}s ${s.path.show}")
+
+case class SessionTableView(sessions: List[SessionView])
+
+object SessionTableView:
+
+  given Converter[List[Session], SessionTableView] = ls =>
+    SessionTableView(ls.map(s => SessionView(s.path.getFileName.toString, s.path.toString)))
+
+  given Show[SessionTableView] = Show.show { v =>
+    val rw = v.sessions.zipWithIndex.map((r, id) => f"| ${id}%2s | ${r.shortcut.show}%10s | ${r.path.show}%60s |")
+    val stroke = "|" + "-".repeat(80) + "|"
+    (stroke +: rw :+ stroke).mkString("\n")
+  }

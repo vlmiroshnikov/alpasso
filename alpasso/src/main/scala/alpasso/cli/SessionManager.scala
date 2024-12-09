@@ -19,7 +19,7 @@ case class Session(path: Path)
 trait SessionManager[F[_]]:
   def current(): F[Option[Session]]
   def listAll(): F[List[Session]]
-  def append(session: Session): F[Unit]
+  def setup(session: Session): F[Unit]
 
 object SessionManager:
 
@@ -59,7 +59,7 @@ object SessionManager:
     override def listAll(): F[List[Session]] =
       readData().map(_.map(_.sessions).getOrElse(Nil))
 
-    override def append(session: Session): F[Unit] =
+    override def setup(session: Session): F[Unit] =
       modify(old =>
         SessionData(current = session.some, sessions = (session :: old.sessions).distinct)
       )

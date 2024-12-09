@@ -14,7 +14,7 @@ import alpasso.cmdline.view.*
 import alpasso.cmdline.view.SessionTableView.given
 import alpasso.cmdline.view.SessionView.given
 import alpasso.common.syntax.*
-import alpasso.common.{ Result, SemVer, Converter }
+import alpasso.common.{Result, SemVer}
 import alpasso.core.model.*
 import alpasso.service.fs.*
 import alpasso.service.fs.model.{ Branch, given }

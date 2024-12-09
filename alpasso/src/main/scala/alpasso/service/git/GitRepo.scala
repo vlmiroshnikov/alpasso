@@ -50,7 +50,6 @@ object GitRepo:
 
     Resource
       .fromAutoCloseable(repoF)
-      .flatTap(repo => Resource.eval(verify_(repo).rethrow))
       .map(Impl(_))
 
   def createNew[F[_]: Sync](repoDir: Path): Resource[F, GitRepo[F]] = Resource

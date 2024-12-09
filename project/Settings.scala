@@ -29,7 +29,6 @@ object Deps {
 
   lazy val jgit  = Seq("org.eclipse.jgit" % "org.eclipse.jgit" % "6.5.0.202303070854-r")
   lazy val fs2   = Seq("co.fs2" %% "fs2-core", "co.fs2" %% "fs2-io").map(_ % "3.10.0")
-  lazy val scopt = Seq("com.github.scopt" %% "scopt" % "4.1.0")
   lazy val glass = Seq("tf.tofu" %% "glass-core" % "0.3.0")
 
   lazy val circe =

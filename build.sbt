@@ -23,13 +23,14 @@ lazy val alpasso = project
     nativeImageOptions += "-H:+JNI",
     nativeImageOptions ++= Seq(
       "-H:+ReportExceptionStackTraces",
-      "--no-fallback"
+      "--no-fallback",
+      "-H:-CheckToolchain"
     )
   )
   .dependsOn(core)
   .settings(Settings.common)
   .settings(
-    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.scopt ++ Deps.jgit ++ Deps.glass ++ Deps.circe ++ Deps.logstage ++ Deps.tagless ++ Deps.tofu ++ Deps.decline
+    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.jgit ++ Deps.glass ++ Deps.circe ++ Deps.logstage ++ Deps.tagless ++ Deps.tofu ++ Deps.decline
   )
 
 lazy val root = project

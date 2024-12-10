@@ -17,6 +17,7 @@ enum RepoOps:
 enum Action:
   case Repo(ops: RepoOps)
   case New(name: SecretName, secret: Option[SecretPayload], meta: Option[SecretMetadata])
+  case Patch(name: SecretName, payload: Option[SecretPayload], meta: Option[SecretMetadata])
   case Filter(where: SecretFilter, format: OutputFormat)
 
 enum Cypher:
@@ -56,6 +57,17 @@ object ArgParser:
     (name, secret, tags).mapN(Action.New.apply)
   }
 
+  val patch: Opts[Action] = Opts.subcommand("patch", "Update exists secret") {
+    val name   = Opts.argument("name").mapValidated(SecretName.of)
+    val secret = Opts.argument("secret").map(SecretPayload.fromString).orNone
+    val tags = Opts
+      .option[String]("meta", "k1=v1,k2=v2")
+      .mapValidated[SecretMetadata](SecretMetadata.fromRaw)
+      .orNone
+
+    (name, secret, tags).mapN(Action.Patch.apply)
+  }
+
   val list: Opts[Action] = Opts.subcommand("ls", "List secrets") {
     val grep = Opts.option[String]("grep", "Grep expression").map(SecretFilter.Grep.apply).orNone
     val output = Opts
@@ -67,7 +79,8 @@ object ArgParser:
     )
   }
 
-  val command: Command[Action] = Command("alpasso", "header", true)(repos orElse add orElse list)
+  val command: Command[Action] =
+    Command("alpasso", "header", true)(repos orElse add orElse list orElse patch)
 
 @main
 def parse(): Unit = {

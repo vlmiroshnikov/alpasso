@@ -51,7 +51,7 @@ object SessionTableView:
     val rw = v
       .sessions
       .zipWithIndex
-      .map((r, id) => f"| ${id}%2s | ${r.shortcut.show}%10s | ${r.path.show}%60s |")
-    val stroke = "|" + "-".repeat(80) + "|"
+      .map((r, id) => f" ${id}%2s  ${r.shortcut.show}%10s ${r.path.show}%60s")
+    val stroke = "=".repeat(80)
     (stroke +: rw :+ stroke).mkString("\n")
   }

@@ -2,19 +2,18 @@ package alpasso.cli
 
 import java.nio.file.*
 
-import scala.annotation.experimental
-
 import cats.*
 import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
 
+import alpasso.cli
 import alpasso.cmdline.*
 import alpasso.cmdline.view.*
 import alpasso.cmdline.view.SessionTableView.given
 import alpasso.cmdline.view.SessionView.given
 import alpasso.common.syntax.*
-import alpasso.common.{Result, SemVer}
+import alpasso.common.{ Result, SemVer }
 import alpasso.core.model.*
 import alpasso.service.fs.*
 import alpasso.service.fs.model.{ Branch, given }
@@ -43,8 +42,6 @@ object CliApp extends IOApp:
         case Left(e)  => IO.println(s"Error: $e").as(ExitCode.Error)
         case Right(r) => IO.println(r.show).as(ExitCode.Success)
 
-    val maybeAction = IO(ArgParser.command.parse(args))
-
     def provideCommand[A](f: Command[IO] => IO[Result[A]]): IO[Result[A]] =
       (for
         session <- EitherT.fromOptionF(smgr.current(), Err.UseSwitchCommand)
@@ -57,23 +54,29 @@ object CliApp extends IOApp:
       case Left(help) =>
         handle(Err.CommandSyntaxError(help.toString).asLeft[Unit])
 
-      case Right(Action.Repo(RepoOps.Init(pathOpt, gpg))) =>
-        val path = pathOpt.getOrElse(Path.of(".local").toAbsolutePath)
-        (bootstrap[IO](path, SemVer.zero, gpg) <* smgr.setup(Session(path))) >>= handle
+      case Right(Action.Repo(ops)) =>
+        ops match
+          case RepoOps.Init(pathOpt, cypher) =>
+            val path = pathOpt.getOrElse(Path.of(".local")).toAbsolutePath
+            (bootstrap[IO](path, SemVer.zero, cypher) <* smgr.setup(Session(path))) >>= handle
 
-      case Right(Action.Repo(RepoOps.List)) =>
-        smgr.listAll().map(_.into().asRight[Err]) >>= handle
-
-      case Right(Action.Repo(RepoOps.Switch(sel))) =>
-        val switch = OptionT(smgr.listAll().map(_.zipWithIndex.find((_, idx) => idx == sel)))
-          .cataF(IO(Err.UseSwitchCommand.asLeft), (s, _) => smgr.setup(s).as(s.into().asRight[Err]))
-        switch >>= handle
+          case RepoOps.List => smgr.listAll().map(_.into().asRight[Err]) >>= handle
+          case RepoOps.Switch(sel) =>
+            val switch = OptionT(smgr.listAll().map(_.zipWithIndex.find((_, idx) => idx == sel)))
+              .cataF(
+                IO(Err.UseSwitchCommand.asLeft),
+                (s, _) => smgr.setup(s).as(s.into().asRight[Err])
+              )
+            switch >>= handle
 
       case Right(Action.New(sn, sp, sm)) =>
         provideCommand(_.create(sn, sp.getOrElse(SecretPayload.empty), sm)) >>= handle
 
       case Right(Action.Filter(where, OutputFormat.Tree)) =>
         provideCommand(_.filter(where)) >>= handle
+
+      case Right(Action.Patch(sn, spOpt, smOpt)) =>
+        provideCommand(_.patch(sn, spOpt, smOpt)) >>= handle
 
       case Right(Action.Filter(where, OutputFormat.Table)) =>
         val res = provideCommand(_.filter(where))

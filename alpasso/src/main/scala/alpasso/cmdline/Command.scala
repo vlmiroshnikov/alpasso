@@ -61,7 +61,7 @@ trait Command[F[_]]:
       payload: SecretPayload,
       meta: Option[SecretMetadata]): F[Result[SecretView]]
 
-  def update(
+  def patch(
       name: SecretName,
       payload: Option[SecretPayload],
       meta: Option[SecretMetadata]): F[Result[SecretView]]
@@ -124,7 +124,7 @@ object Command:
 
       result.value
 
-    override def update(
+    override def patch(
         name: SecretName,
         payload: Option[SecretPayload],
         meta: Option[SecretMetadata]): F[Result[SecretView]] =

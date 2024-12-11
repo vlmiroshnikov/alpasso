@@ -5,7 +5,7 @@ lazy val core = project
   .in(file("core"))
   .settings(Settings.common)
   .settings(
-    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.fs2 ++ Deps.tagless ++ Deps.evo_circe
+    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.tagless ++ Deps.evo_circe
   )
 
 lazy val alpasso = project

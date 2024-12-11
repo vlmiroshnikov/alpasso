@@ -10,10 +10,6 @@ import cats.effect.*
 import cats.syntax.all.*
 
 import alpasso.common.Logger
-import alpasso.service.fs.repo.model.CryptoAlg
-
-import logstage.LogIO
-import logstage.LogIO.log
 
 enum CypherError:
   case InvalidCypher

@@ -27,10 +27,7 @@ trait GitRepo[F[_]]:
 
 object GitRepo:
 
-  def openExists[F[_]](
-      repoDir: Path
-    )(using
-      F: Sync[F]): Resource[F, GitRepo[F]] =
+  def openExists[F[_]: Sync as F](repoDir: Path): Resource[F, GitRepo[F]] =
     import F.blocking
 
     val location = repoDir.resolve(".git")
@@ -65,11 +62,7 @@ object GitRepo:
       val status = Git.wrap(repository).status().call()
       Either.cond(status.isClean, (), GitError.RepositoryIsDirty)
 
-  class Impl[F[_]](
-      using
-      F: Sync[F]
-    )(repository: Repository)
-      extends GitRepo[F]:
+  class Impl[F[_]: Sync as F](repository: Repository) extends GitRepo[F]:
     import F.blocking
 
     given Order[Path] = Order.fromComparable[Path]

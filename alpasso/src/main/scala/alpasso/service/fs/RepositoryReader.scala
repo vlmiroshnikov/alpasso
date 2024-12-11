@@ -40,11 +40,7 @@ object RepositoryMutator:
     val gitted: RepositoryMutator[Mid[F, *]] = Gitted[F](config.repoDir)
     (gitted) attach Impl[F](config.repoDir)
 
-  class Impl[F[_]: Logger](
-      repoDir: Path
-    )(using
-      F: Sync[F])
-      extends RepositoryMutator[F] {
+  class Impl[F[_]: Logger: Sync as F](repoDir: Path) extends RepositoryMutator[F] {
 
     import F.blocking
     import StandardOpenOption.*
@@ -171,11 +167,7 @@ object RepositoryReader:
 
   }
 
-  class Impl[F[_]](
-      repoDir: Path
-    )(using
-      F: Sync[F])
-      extends RepositoryReader[F]:
+  class Impl[F[_]: Sync as F](repoDir: Path) extends RepositoryReader[F]:
 
     import F.blocking
     import StandardOpenOption.*

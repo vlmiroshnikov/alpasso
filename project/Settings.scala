@@ -2,7 +2,7 @@ import sbt.*
 import sbt.Keys.*
 
 object Versions {
-  val scala      = "3.4.2"
+  val scala      = "3.6.2"
   val cats       = "2.10.0"
   val catsEffect = "3.5.1"
   val circe      = "0.14.6"
@@ -15,7 +15,7 @@ object Settings {
     version := Versions.scala,
     scalacOptions ++= Seq("-deprecation",
                           "-new-syntax",
-                          "-Ykind-projector",
+                          "-Xkind-projector",
                           "-experimental",
                           "-Wconf:msg=eta-expanded even though:silent"
     )

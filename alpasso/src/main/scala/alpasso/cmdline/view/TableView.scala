@@ -8,7 +8,7 @@ import alpasso.common.Converter
 
 case class TableRowView[+R](id: Int, data: R)
 
-case class TableView[R](rows: List[TableRowView[R]])
+case class TableView[+R](rows: List[TableRowView[R]])
 
 object TableView:
 
@@ -38,6 +38,7 @@ object SessionView:
 
   given Converter[Session, SessionView] =
     s => SessionView(s.path.getFileName.toString, s.path.toString)
+
   given Show[SessionView] = Show.show(s => s"${s.shortcut.show}s ${s.path.show}")
 
 case class SessionTableView(sessions: List[SessionView])

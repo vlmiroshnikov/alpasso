@@ -1,11 +1,9 @@
 package alpasso.common
 
-import scala.util.matching.Regex
-
 import cats.*
 import cats.syntax.all.*
 
-import io.circe.{ Codec, Decoder, Encoder }
+import io.circe.*
 
 case class SemVer(major: Int, minor: Int, patch: Int)
 

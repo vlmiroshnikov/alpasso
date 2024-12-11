@@ -9,6 +9,12 @@ enum Branch[+A]:
   case Empty(path: Path)
   case Solid(path: Path, data: A)
 
+  def traverse[F[_], B](f: A => F[B])(implicit F: Applicative[F]): F[Branch[B]] =
+    this match {
+      case Solid(path, a) => F.map(f(a))(Solid.apply(path, _))
+      case Empty(path) => F.pure(Empty.apply(path))
+    }
+
 object Branch:
 
   extension [A](b: Branch[A])
@@ -31,7 +37,6 @@ object Branch:
     case Branch.Solid(path, data) => data.show
 
   given Functor[Branch] = new Functor[Branch]:
-
     override def map[A, B](fa: Branch[A])(f: A => B): Branch[B] =
       fa match
         case Empty(dir)        => Branch.Empty(dir)

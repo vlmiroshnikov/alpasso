@@ -91,13 +91,12 @@ object Command:
           case SecretFilter.Grep(pattern) => s.name.contains(pattern)
           case SecretFilter.Empty         => true
 
+      def load(s: SecretPacket[RawStoreLocations]) =
+        reader.loadFully(s).liftE[Err]
+
       (for
         rawTree <- reader.walkTree.liftE[Err]
-        tree <- rawTree.traverse {
-                  case Branch.Empty(dir) => EitherT.pure(Branch.Empty(dir))
-                  case Branch.Solid(dir, s) =>
-                    reader.loadFully(s).liftE[Err].map(m => Branch.Solid(dir, m))
-                }
+        tree    <- rawTree.traverse(branch => branch.traverse(load))
       yield cutTree(tree, predicate)
         .map(
           _.traverse(b =>

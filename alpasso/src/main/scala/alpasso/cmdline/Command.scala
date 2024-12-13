@@ -7,17 +7,13 @@ import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
 
-import alpasso.cli.Cypher
 import alpasso.cmdline.view.*
 import alpasso.common.syntax.*
 import alpasso.common.{ Logger, Result, SemVer }
 import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
-import alpasso.service.fs.model.*
-import alpasso.service.fs.repo.model.CryptoAlg.Gpg
-import alpasso.service.fs.repo.model.{ CryptoAlg, RepositoryConfiguration, RepositoryMetaConfig }
-import alpasso.service.fs.repo.{ ProvisionErr, RepoMetaErr, RepositoryProvisioner }
+import alpasso.service.fs.model.{Branch, *}
 import alpasso.service.git.*
 
 import glass.*
@@ -46,12 +42,9 @@ object Err:
       case GitError.UnexpectedError          => Err.InternalErr
 end Err
 
-def bootstrap[F[_]: Sync: Logger](repoDir: Path, version: SemVer, cypher: Cypher): F[Result[StorageView]] =
+def bootstrap[F[_] : Sync : Logger](repoDir: Path, version: SemVer, cypher: CypherAlg): F[Result[StorageView]] =
   val provisioner = RepositoryProvisioner.make(repoDir)
-  val alg = cypher match
-    case Cypher.Gpg(fingerprint) => CryptoAlg.Gpg(fingerprint)
-
-  val config = RepositoryMetaConfig(version, alg)
+  val config = RepositoryMetaConfig(version, cypher)
   provisioner.provision(config).liftE[Err].map(_ => StorageView(repoDir)).value
 
 trait Command[F[_]]:
@@ -71,9 +64,8 @@ trait Command[F[_]]:
 object Command:
 
   def make[F[_]: Async: Logger](config: RepositoryConfiguration): Command[F] =
-    val cs = config.cryptoAlg match
-      case CryptoAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
-      case CryptoAlg.Raw              => CypherService.empty
+    val cs = config.cypherAlg match
+      case CypherAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
 
     val reader  = RepositoryReader.make(config, cs)
     val mutator = RepositoryMutator.make(config)

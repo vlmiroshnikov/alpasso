@@ -6,11 +6,12 @@ import cats.syntax.all.*
 
 import alpasso.cmdline.view.{ OutputFormat, SecretFilter }
 import alpasso.core.model.{ SecretMetadata, SecretName, SecretPayload }
+import alpasso.service.cypher.CypherAlg
 
 import com.monovore.decline.*
 
 enum RepoOps:
-  case Init(path: Option[Path], cypher: Cypher)
+  case Init(path: Option[Path], cypher: CypherAlg)
   case List
   case Switch(index: Int)
 
@@ -20,16 +21,13 @@ enum Action:
   case Patch(name: SecretName, payload: Option[SecretPayload], meta: Option[SecretMetadata])
   case Filter(where: SecretFilter, format: OutputFormat)
 
-enum Cypher:
-  case Gpg(fingerprint: String)
-
 object ArgParser:
 
   val repos: Opts[Action] = Opts.subcommand("repo", "Repositories ops") {
 
     val init = Opts.subcommand("init", "Init new repository") {
       val path = Opts.option[Path]("path", "Repository path", "p").orNone
-      val gpg  = Opts.option[String]("gpg-fingerprint", "GPG fingerprint").map(Cypher.Gpg(_))
+      val gpg = Opts.option[String]("gpg-fingerprint", "GPG fingerprint").map(CypherAlg.Gpg(_))
 
       (path, gpg).mapN(RepoOps.Init.apply)
     }

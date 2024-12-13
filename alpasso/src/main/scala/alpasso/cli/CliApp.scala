@@ -12,13 +12,11 @@ import alpasso.cmdline.*
 import alpasso.cmdline.view.*
 import alpasso.cmdline.view.SessionTableView.given
 import alpasso.cmdline.view.SessionView.given
-
+import alpasso.common.*
 import alpasso.common.syntax.*
-import alpasso.common.{ Result, SemVer }
 import alpasso.core.model.*
-import alpasso.service.fs.model.{ Branch, given }
-import alpasso.service.fs.repo.RepositoryConfigReader
-import alpasso.service.fs.repo.model.{ CryptoAlg, RepositoryConfiguration }
+import alpasso.service.fs.RepositoryConfigReader
+import alpasso.service.fs.model.*
 
 import logstage.{ IzLogger, Level, LogIO }
 

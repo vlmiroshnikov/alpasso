@@ -21,12 +21,10 @@ import alpasso.common.{ Logger, Result }
 import alpasso.core.model.*
 import alpasso.service.cypher.CypherService
 import alpasso.service.fs.model.*
-import alpasso.service.fs.repo.model.{ CryptoAlg, RepositoryConfiguration }
 import alpasso.service.git.GitRepo
 
 import io.circe.{ Decoder, Encoder, Json }
 import logstage.LogIO
-import logstage.LogIO.log
 import tofu.higherKind.*
 import tofu.higherKind.Mid.*
 
@@ -250,8 +248,6 @@ def walkFileTree(root: Path, exceptDir: Path => Boolean): Node[Entry] =
   Files.walkFileTree(root, visitor)
   val siblings = stack.head.siblings
   siblings.headOption.getOrElse(stub)
-
-import alpasso.core.model.given
 
 type Mark[A] = Either[A, A]
 

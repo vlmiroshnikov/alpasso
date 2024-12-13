@@ -1,20 +1,15 @@
-package alpasso.service.fs.repo
+package alpasso.service.fs
 
 import java.nio.file.{ Files, Path, StandardOpenOption }
-
-import scala.annotation.experimental
 
 import cats.*
 import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
 import cats.tagless.*
-import cats.tagless.derived.*
-import cats.tagless.syntax.*
 
 import alpasso.common.{ Logger, SemVer }
-import alpasso.service.cypher.CypherService
-import alpasso.service.fs.repo.model.{ CryptoAlg, RepositoryConfiguration, RepositoryMetaConfig }
+import alpasso.service.cypher.{CypherAlg, CypherService}
 import alpasso.service.git.GitRepo
 
 import evo.derivation.*
@@ -27,18 +22,8 @@ import logstage.LogIO.log
 import tofu.higherKind.*
 import tofu.higherKind.Mid.*
 
-object model:
-
-  @Discriminator("type")
-  @SnakeCase
-  enum CryptoAlg derives Config, EvoCodec:
-    case Gpg(fingerprint: String)
-    case Raw
-
-  case class RepositoryConfiguration(repoDir: Path, version: SemVer, cryptoAlg: CryptoAlg)
-
-  @SnakeCase
-  case class RepositoryMetaConfig(version: SemVer, cryptoAlg: CryptoAlg) derives Config, EvoCodec
+@SnakeCase
+case class RepositoryMetaConfig(version: SemVer, cryptoAlg: CypherAlg)derives Config, EvoCodec
 
 trait RepositoryConfigReader[F[_]]:
   def read(path: Path): F[Either[RepoMetaErr, RepositoryMetaConfig]]
@@ -46,11 +31,9 @@ trait RepositoryConfigReader[F[_]]:
 enum ProvisionErr:
   case AlreadyExists, Undefined
 
-@experimental
 trait Provisioner[F[_]] derives ApplyK:
   def provision(config: RepositoryMetaConfig): F[Either[ProvisionErr, Unit]]
 
-@experimental
 object RepositoryProvisioner:
   import StandardOpenOption.*
 
@@ -70,8 +53,7 @@ object RepositoryProvisioner:
     override def provision(config: RepositoryMetaConfig): Mid[F, Either[ProvisionErr, Unit]] = {
       action =>
         val cs = config.cryptoAlg match
-          case CryptoAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
-          case CryptoAlg.Raw              => CypherService.empty
+          case CypherAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
         (for
           _ <- EitherT.liftF(cs.encrypt(Array[Byte](1)))
           r <- EitherT(action)
@@ -104,13 +86,11 @@ object RepositoryProvisioner:
             case Right(_) => log.info("Provisioning completed")
           }
 
-  class MetaProvisioner[F[_]](
-      using
-      F: Sync[F]
-    )(repoDir: Path)
-      extends Provisioner[F]:
-    private val fullPath = repoDir.resolve(repoMetadataFile)
+  class MetaProvisioner[F[_] : Sync as F](repoDir: Path) extends Provisioner[F]:
+
     import F.blocking
+
+    private val fullPath = repoDir.resolve(repoMetadataFile)
 
     override def provision(config: RepositoryMetaConfig): F[Either[ProvisionErr, Unit]] =
       blocking(Files.exists(repoDir)).flatMap { exists =>
@@ -128,8 +108,7 @@ enum RepoMetaErr:
 
 object RepositoryConfigReader:
 
-  def make[F[_]: Sync: Logger]: RepositoryConfigReader[F] = (repoDir: Path) =>
-    val S = summon[Sync[F]]
+  def make[F[_] : Sync as S : Logger]: RepositoryConfigReader[F] = (repoDir: Path) =>
     import S.blocking
 
     val fullPath = repoDir.resolve(RepositoryProvisioner.repoMetadataFile)

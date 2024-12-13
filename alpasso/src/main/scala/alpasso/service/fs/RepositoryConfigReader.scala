@@ -1,21 +1,16 @@
-package alpasso.service.fs.repo
+package alpasso.service.fs
 
 import java.nio.file.{ Files, Path, StandardOpenOption }
-
-import scala.annotation.experimental
 
 import cats.*
 import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
 import cats.tagless.*
-import cats.tagless.derived.*
-import cats.tagless.syntax.*
 
-import alpasso.service.cypher.CypherService
-import alpasso.service.fs.repo.model.{ CryptoAlg, RepositoryConfiguration, RepositoryMetaConfig }
+import alpasso.common.{ Logger, SemVer }
+import alpasso.service.cypher.{ CypherAlg, CypherService }
 import alpasso.service.git.GitRepo
-import alpasso.shared.SemVer
 
 import evo.derivation.*
 import evo.derivation.circe.*
@@ -27,40 +22,24 @@ import logstage.LogIO.log
 import tofu.higherKind.*
 import tofu.higherKind.Mid.*
 
-case class RootPathConfig(current: Path)
-
-object model:
-
-  @Discriminator("type")
-  @SnakeCase
-  enum CryptoAlg derives Config, EvoCodec:
-    case Gpg(fingerprint: String)
-    case Raw
-
-  case class RepositoryConfiguration(repoDir: Path, version: SemVer, cryptoAlg: CryptoAlg)
-
-  @SnakeCase
-  case class RepositoryMetaConfig(version: SemVer, cryptoAlg: CryptoAlg) derives Config, EvoCodec
-
-type Logger[F[_]] = LogIO[F]
+@SnakeCase
+case class RepositoryMetaConfig(version: SemVer, cryptoAlg: CypherAlg) derives Config, EvoCodec
 
 trait RepositoryConfigReader[F[_]]:
-  def read: F[Either[RepoMetaErr, RepositoryMetaConfig]]
+  def read(path: Path): F[Either[RepoMetaErr, RepositoryMetaConfig]]
 
 enum ProvisionErr:
   case AlreadyExists, Undefined
 
-@experimental
 trait Provisioner[F[_]] derives ApplyK:
   def provision(config: RepositoryMetaConfig): F[Either[ProvisionErr, Unit]]
 
-@experimental
 object RepositoryProvisioner:
   import StandardOpenOption.*
 
-  val repoMetadataFile: String = ".repo"
+  val repoMetadataFile: String = ".alpasso"
 
-  def make[F[_]: Logger: Async](repoDir: Path): Provisioner[F] =
+  def make[F[_]: Logger: Sync](repoDir: Path): Provisioner[F] =
     val alg = MetaProvisioner(repoDir)
 
     val gitted: Provisioner[Mid[F, *]] = GitProvisioner[F](repoDir)
@@ -69,14 +48,15 @@ object RepositoryProvisioner:
 
     (cs |+| gitted |+| logged) attach alg
 
-  class CypherProvisioner[F[_]: Async: Logger] extends Provisioner[Mid[F, *]] {
+  class CypherProvisioner[F[_]: Sync: Logger] extends Provisioner[Mid[F, *]] {
 
     override def provision(config: RepositoryMetaConfig): Mid[F, Either[ProvisionErr, Unit]] = {
       action =>
+        val cs = config.cryptoAlg match
+          case CypherAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
         (for
-          cs <- EitherT(CypherService.make(config.cryptoAlg)).leftMap(_ => ProvisionErr.Undefined)
-          _  <- EitherT.liftF(cs.encrypt(Array[Byte](1)))
-          r  <- EitherT(action)
+          _ <- EitherT.liftF(cs.encrypt(Array[Byte](1)))
+          r <- EitherT(action)
         yield r).value
     }
   }
@@ -106,13 +86,11 @@ object RepositoryProvisioner:
             case Right(_) => log.info("Provisioning completed")
           }
 
-  class MetaProvisioner[F[_]](
-      using
-      F: Sync[F]
-    )(repoDir: Path)
-      extends Provisioner[F]:
-    private val fullPath = repoDir.resolve(repoMetadataFile)
+  class MetaProvisioner[F[_]: Sync as F](repoDir: Path) extends Provisioner[F]:
+
     import F.blocking
+
+    private val fullPath = repoDir.resolve(repoMetadataFile)
 
     override def provision(config: RepositoryMetaConfig): F[Either[ProvisionErr, Unit]] =
       blocking(Files.exists(repoDir)).flatMap { exists =>
@@ -128,22 +106,18 @@ object RepositoryProvisioner:
 enum RepoMetaErr:
   case NotInitialized, InvalidFormat
 
-@experimental
 object RepositoryConfigReader:
 
-  def make[F[_]: Logger](
-      repoDir: Path
-    )(using
-      F: Sync[F]): RepositoryConfigReader[F] = new RepositoryConfigReader[F]:
-    private val fullPath = repoDir.resolve(RepositoryProvisioner.repoMetadataFile)
-    import F.blocking
+  def make[F[_]: Sync as S: Logger]: RepositoryConfigReader[F] = (repoDir: Path) =>
+    import S.blocking
 
-    def read: F[Either[RepoMetaErr, RepositoryMetaConfig]] =
-      blocking(Files.exists(fullPath)).flatMap { exists =>
-        if !exists then RepoMetaErr.NotInitialized.asLeft.pure[F]
-        else
-          for
-            raw <- blocking(Files.readString(fullPath))
-            ctx <- blocking(parser.parse(raw).flatMap(_.as[RepositoryMetaConfig]))
-          yield ctx.leftMap(_ => RepoMetaErr.InvalidFormat)
-      }
+    val fullPath = repoDir.resolve(RepositoryProvisioner.repoMetadataFile)
+
+    blocking(Files.exists(fullPath)).flatMap { exists =>
+      if !exists then RepoMetaErr.NotInitialized.asLeft.pure[F]
+      else
+        for
+          raw <- blocking(Files.readString(fullPath))
+          ctx <- blocking(parser.parse(raw).flatMap(_.as[RepositoryMetaConfig]))
+        yield ctx.leftMap(_ => RepoMetaErr.InvalidFormat)
+    }

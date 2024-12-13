@@ -1,6 +1,7 @@
 package alpasso.service.cypher
 
-import scala.concurrent.duration.*
+import java.io.{ ByteArrayInputStream, ByteArrayOutputStream }
+
 import scala.sys.process.*
 
 import cats.*
@@ -8,62 +9,70 @@ import cats.data.EitherT
 import cats.effect.*
 import cats.syntax.all.*
 
-import alpasso.service.fs.repo.model.CryptoAlg
+import alpasso.common.Logger
 
-import logstage.LogIO
-import logstage.LogIO.log
+enum CypherError:
+  case InvalidCypher
+  case EncryptionError
+  case DecryptionError
+
+type Result[A] = Either[CypherError, A]
+
+opaque type Recipient <: String = String
 
 trait CypherService[F[_]]:
-  def encrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]]
-  def decrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]]
+  def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]]
+  def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]]
 
 object CypherService:
 
-  private class GpgImpl[F[_]: Functor](client: GpgClient[F], fg: String) extends CypherService[F]:
+  private class GpgImpl[F[_]: Sync](fg: String) extends CypherService[F]:
 
-    override def encrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] =
-      EitherT(client.encrypt(fg, RawData.from(raw))).map(_.underlying).value
+    private val silentLogger =
+      ProcessLogger(fout => println(s"FOUT: ${fout}"), ferr => println(s"FERRL ${ferr}"))
 
-    override def decrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] =
-      EitherT(client.decrypt(fg, EncryptedData.from(raw))).map(_.underlying).value
+    override def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]] =
+      val bis     = ByteArrayInputStream(raw)
+      val bos     = ByteArrayOutputStream()
+      val encrypt = Process("gpg", Seq("--encrypt", "--recipient", fg, "--armor")) #< bis #> bos
+      encrypt.!(silentLogger)
+
+      EitherT.pure(bos.toByteArray).value
+
+    override def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]] =
+      val bis     = ByteArrayInputStream(raw)
+      val bos     = ByteArrayOutputStream()
+      val decrypt = Process("gpg", Seq("--decrypt", "--recipient", fg, "--armor")) #< bis #> bos
+
+      decrypt.!(silentLogger)
+
+      EitherT.pure(bos.toByteArray).value
 
   def empty[F[_]: Applicative]: CypherService[F] = new CypherService[F]:
-    override def encrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] = raw.asRight.pure
-    override def decrypt(raw: Array[Byte]): F[Either[Unit, Array[Byte]]] = raw.asRight.pure
+    override def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]] = raw.asRight.pure
+    override def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]] = raw.asRight.pure
 
-  def make[F[_]: Async: Logger](alg: CryptoAlg): F[Either[Unit, CypherService[F]]] = {
-    alg match
-      case CryptoAlg.Gpg(fg) =>
-        CypherService.makeGpgCypher(fg, () => Sync[F].pure("$!lentium"))
-      case CryptoAlg.Raw =>
-        CypherService.empty.asRight.pure[F]
-  }
+  def gpg[F[_]: Sync: Logger](fg: String): CypherService[F] = GpgImpl[F](fg)
 
-  def makeGpgCypher[F[_]: Async: Logger](fg: String, enterPass: () => F[String]): F[Either[Unit, CypherService[F]]] =
-    val client = GpgClient.make[F]()
+@main
+def main(): Unit = {
 
-    def fork =
-      for
-        _ <- log.info("Run fork")
-        _ <-
-          Sync[F].blocking(
-            Process("/Users/v.miroshnikov/workspace/alpasso/alpasso/target/universal/stage/bin/alpasso daemon")
-              .run(BasicIO(false, ProcessLogger(out => println(out))).daemonized())
-          )
-        _ <- log.info("try sleep")
-        _ <- Temporal[F].sleep(3.seconds)
-      yield ()
+  val fg = "64695F7D212F979D3553AFC5E0D6CE10FBEB0423"
 
-    def create =
-      for
-        pass    <- EitherT.liftF(enterPass())
-        session <- EitherT(client.createSession(fg, pass))
-      yield session
+  val bis = ByteArrayInputStream("hello 123123123#$!!#!@@!#".getBytes)
+  val bos = ByteArrayOutputStream()
+  // gpg --encrypt --no-compress  --recipient
+  val encrypt = Process("gpg", Seq("--encrypt", "--recipient", fg, "--armor")) #< bis #> bos
+  encrypt.!
 
-    val res: EitherT[F, Unit, CypherService[F]] =
-      for
-        _ <- EitherT(client.healthCheck()).redeemWith(e => EitherT.liftF(fork), _ => ().pure)
-        _ <- EitherT(client.getSession(fg)).leftFlatMap(_ => create)
-      yield new GpgImpl[F](client, fg)
+  val res = bos.toByteArray
+  println(new String(res))
 
-    res.value
+  val bis1 = ByteArrayInputStream(bos.toByteArray)
+  val bos1 = ByteArrayOutputStream()
+
+  val decrypt = Process("gpg", Seq("--decrypt", "--recipient", fg, "--armor")) #< bis1 #> bos1
+  decrypt.!
+
+  println(new String(bos1.toByteArray))
+}

@@ -13,7 +13,7 @@ import alpasso.common.{ Logger, Result, SemVer }
 import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
-import alpasso.service.fs.model.{Branch, *}
+import alpasso.service.fs.model.{ Branch, * }
 import alpasso.service.git.*
 
 import glass.*
@@ -42,9 +42,9 @@ object Err:
       case GitError.UnexpectedError          => Err.InternalErr
 end Err
 
-def bootstrap[F[_] : Sync : Logger](repoDir: Path, version: SemVer, cypher: CypherAlg): F[Result[StorageView]] =
+def bootstrap[F[_]: Sync: Logger](repoDir: Path, version: SemVer, cypher: CypherAlg): F[Result[StorageView]] =
   val provisioner = RepositoryProvisioner.make(repoDir)
-  val config = RepositoryMetaConfig(version, cypher)
+  val config      = RepositoryMetaConfig(version, cypher)
   provisioner.provision(config).liftE[Err].map(_ => StorageView(repoDir)).value
 
 trait Command[F[_]]:

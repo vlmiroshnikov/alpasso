@@ -9,7 +9,7 @@ import cats.syntax.all.*
 import cats.tagless.*
 
 import alpasso.common.{ Logger, SemVer }
-import alpasso.service.cypher.{CypherAlg, CypherService}
+import alpasso.service.cypher.{ CypherAlg, CypherService }
 import alpasso.service.git.GitRepo
 
 import evo.derivation.*
@@ -23,7 +23,7 @@ import tofu.higherKind.*
 import tofu.higherKind.Mid.*
 
 @SnakeCase
-case class RepositoryMetaConfig(version: SemVer, cryptoAlg: CypherAlg)derives Config, EvoCodec
+case class RepositoryMetaConfig(version: SemVer, cryptoAlg: CypherAlg) derives Config, EvoCodec
 
 trait RepositoryConfigReader[F[_]]:
   def read(path: Path): F[Either[RepoMetaErr, RepositoryMetaConfig]]
@@ -86,7 +86,7 @@ object RepositoryProvisioner:
             case Right(_) => log.info("Provisioning completed")
           }
 
-  class MetaProvisioner[F[_] : Sync as F](repoDir: Path) extends Provisioner[F]:
+  class MetaProvisioner[F[_]: Sync as F](repoDir: Path) extends Provisioner[F]:
 
     import F.blocking
 
@@ -108,7 +108,7 @@ enum RepoMetaErr:
 
 object RepositoryConfigReader:
 
-  def make[F[_] : Sync as S : Logger]: RepositoryConfigReader[F] = (repoDir: Path) =>
+  def make[F[_]: Sync as S: Logger]: RepositoryConfigReader[F] = (repoDir: Path) =>
     import S.blocking
 
     val fullPath = repoDir.resolve(RepositoryProvisioner.repoMetadataFile)

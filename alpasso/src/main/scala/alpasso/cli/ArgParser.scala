@@ -27,7 +27,7 @@ object ArgParser:
 
     val init = Opts.subcommand("init", "Init new repository") {
       val path = Opts.option[Path]("path", "Repository path", "p").orNone
-      val gpg = Opts.option[String]("gpg-fingerprint", "GPG fingerprint").map(CypherAlg.Gpg(_))
+      val gpg  = Opts.option[String]("gpg-fingerprint", "GPG fingerprint").map(CypherAlg.Gpg(_))
 
       (path, gpg).mapN(RepoOps.Init.apply)
     }

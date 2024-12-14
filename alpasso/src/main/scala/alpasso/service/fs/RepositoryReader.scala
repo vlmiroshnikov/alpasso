@@ -1,9 +1,16 @@
 package alpasso.service.fs
 
 import java.io.IOException
-import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.BasicFileAttributes
-import java.nio.file.{ FileVisitResult, FileVisitor, Files, Path, Paths }
+import java.nio.file.{
+  FileVisitResult,
+  FileVisitor,
+  Files,
+  OpenOption,
+  Path,
+  Paths,
+  StandardOpenOption
+}
 
 import scala.collection.mutable
 
@@ -12,21 +19,43 @@ import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
 import cats.tagless.*
-import cats.tagless.derived.*
-import cats.tagless.syntax.*
 
-import alpasso.cmdline.Err
+import alpasso.common.Logger
 import alpasso.common.syntax.*
-import alpasso.common.{ Logger, Result }
 import alpasso.core.model.*
-import alpasso.service.cypher.CypherService
+import alpasso.service.cypher
+import alpasso.service.cypher.{CypherError, CypherService}
 import alpasso.service.fs.model.*
-import alpasso.service.git.GitRepo
+import alpasso.service.git.{GitError, GitRepo}
 
+import glass.Upcast
 import io.circe.{ Decoder, Encoder, Json }
 import logstage.LogIO
 import tofu.higherKind.*
 import tofu.higherKind.Mid.*
+
+enum RepositoryErr:
+  case AlreadyExists(name: SecretName)
+  case NotFound(name: SecretName)
+  case Corrupted(name: SecretName)
+  case Inconsistent(name: String)
+
+  case Undefiled
+
+object RepositoryErr:
+  given Upcast[RepositoryErr, GitError] = fromGitError
+
+  given Upcast[RepositoryErr, CypherError] = _ => RepositoryErr.Inconsistent("Invalid cypher")
+
+  private def fromGitError(ge: GitError): RepositoryErr =
+    ge match
+      case GitError.RepositoryNotFound(path) =>
+        RepositoryErr.Inconsistent("Git repository not initialized")
+      case GitError.RepositoryIsDirty =>
+        RepositoryErr.Inconsistent("Git repository has uncommited files")
+      case GitError.UnexpectedError => RepositoryErr.Undefiled
+
+type Result[+T] = Either[RepositoryErr, T]
 
 trait RepositoryMutator[F[_]] derives ApplyK:
   def create(name: SecretName, payload: RawSecretData, meta: RawMetadata): F[Result[SecretPacket[RawStoreLocations]]]
@@ -41,7 +70,11 @@ object RepositoryMutator:
   class Impl[F[_]: Logger: Sync as F](repoDir: Path) extends RepositoryMutator[F] {
 
     import F.blocking
+    import Files.*
     import StandardOpenOption.*
+
+    val CreateOps: List[OpenOption] = List(CREATE_NEW, WRITE)
+    val UpdateOps: List[OpenOption] = List(CREATE, TRUNCATE_EXISTING, WRITE)
 
     override def create(name: SecretName, payload: RawSecretData, meta: RawMetadata): F[Result[SecretPacket[RawStoreLocations]]] =
       val path = repoDir.resolve(name)
@@ -49,17 +82,13 @@ object RepositoryMutator:
       val metaPath    = path.resolve("meta")
       val payloadPath = path.resolve("payload")
 
-      blocking(Files.exists(path) && Files.exists(payloadPath)).flatMap { rootExists =>
-        if rootExists then Err.AlreadyExists(name).asLeft.pure[F]
+      blocking(exists(path) && exists(payloadPath)).flatMap { rootExists =>
+        if rootExists then RepositoryErr.AlreadyExists(name).asLeft.pure[F]
         else
           for
-            _ <- blocking(Files.createDirectories(path))
-            _ <- blocking(
-                   Files.write(payloadPath, payload.byteArray, CREATE_NEW, WRITE)
-                 )
-            _ <- blocking(
-                   Files.writeString(metaPath, meta.rawString, CREATE_NEW, WRITE)
-                 )
+            _ <- blocking(createDirectories(path))
+            _ <- blocking(write(payloadPath, payload.byteArray, CreateOps *))
+            _ <- blocking(writeString(metaPath, meta.rawString, CreateOps *))
           yield SecretPacket(name, RawStoreLocations(payloadPath, metaPath)).asRight
       }
 
@@ -69,12 +98,12 @@ object RepositoryMutator:
       val metaPath    = path.resolve("meta")
       val payloadPath = path.resolve("payload")
 
-      blocking(Files.exists(path) && Files.exists(metaPath)).flatMap { exists =>
-        if !exists then Err.StorageCorrupted(metaPath).asLeft.pure[F]
+      blocking(exists(path) && exists(metaPath)).flatMap { exists =>
+        if !exists then RepositoryErr.Corrupted(name).asLeft.pure[F]
         else
           for
-            _ <- blocking(Files.write(payloadPath, payload.byteArray, StandardOpenOption.WRITE))
-            _ <- blocking(Files.writeString(metaPath, metadata.rawString, CREATE, WRITE))
+            _ <- blocking(write(payloadPath, payload.byteArray, UpdateOps *))
+            _ <- blocking(writeString(metaPath, metadata.rawString, UpdateOps *))
           yield SecretPacket(name, RawStoreLocations(payloadPath, metaPath)).asRight
       }
   }
@@ -88,7 +117,7 @@ object RepositoryMutator:
           (for
             locations <- EitherT(action)
             files = NonEmptyList.of(locations.payload.secretData, locations.payload.metadata)
-            _ <- git.commitFiles(files, commitMsg).liftE[Err]
+            _ <- git.commitFiles(files, commitMsg).liftE[RepositoryErr]
           yield locations).value
         }
       }
@@ -100,7 +129,7 @@ object RepositoryMutator:
           (for
             locations <- EitherT(action)
             files = NonEmptyList.of(locations.payload.secretData, locations.payload.metadata)
-            _ <- git.commitFiles(files, commitMsg).liftE[Err]
+            _ <- git.commitFiles(files, commitMsg).liftE[RepositoryErr]
           yield locations).value
         }
       }
@@ -129,7 +158,7 @@ object RepositoryReader:
       action =>
         (for
           d <- EitherT(action)
-          r <- cs.decrypt(d.payload.byteArray).liftE[Err]
+          r <- cs.decrypt(d.payload.byteArray).liftE[RepositoryErr]
         yield d.copy(payload = RawSecretData.from(r))).value
 
     override def loadMeta(secret: SecretPacket[Path]): Mid[F, Result[SecretPacket[RawMetadata]]] =
@@ -139,7 +168,7 @@ object RepositoryReader:
       action =>
         (for
           d: SecretPacket[(RawSecretData, RawMetadata)] <- EitherT(action)
-          r <- cs.decrypt(d.payload._1.byteArray).liftE[Err]
+          r <- cs.decrypt(d.payload._1.byteArray).liftE[RepositoryErr]
         yield d.copy(payload = (RawSecretData.from(r), d.payload._2))).value
 
     override def walkTree: Mid[F, Result[Node[Branch[SecretPacket[RawStoreLocations]]]]] =
@@ -148,8 +177,8 @@ object RepositoryReader:
 
   class Gitted[F[_]: Sync](repoDir: Path) extends RepositoryReader[Mid[F, *]] {
 
-    private val verifyGitRepo: EitherT[F, Err, Unit] =
-      GitRepo.openExists(repoDir).use(_.verify).liftE[Err]
+    private val verifyGitRepo: EitherT[F, RepositoryErr, Unit] =
+      GitRepo.openExists(repoDir).use(_.verify).liftE[RepositoryErr]
 
     override def loadPayload(secret: SecretPacket[Path]): Mid[F, Result[SecretPacket[RawSecretData]]] =
       action => verifyGitRepo.flatMapF(_ => action).value
@@ -166,9 +195,7 @@ object RepositoryReader:
   }
 
   class Impl[F[_]: Sync as F](repoDir: Path) extends RepositoryReader[F]:
-
     import F.blocking
-    import StandardOpenOption.*
 
     override def walkTree: F[Result[Node[Branch[SecretPacket[RawStoreLocations]]]]] =
       def mapBranch: Entry => Branch[SecretPacket[RawStoreLocations]] =
@@ -180,7 +207,7 @@ object RepositoryReader:
               Branch.Solid(dir, SecretPacket(name, RawStoreLocations(payload, meta)))
             case _ => Branch.Empty(dir)
 
-      val exceptDir: Path => Boolean = p => p.endsWith(".git") || p.endsWith(".repo")
+      val exceptDir: Path => Boolean = p => p.endsWith(".git") || p.endsWith(".alpasso")
 
       for tree <- blocking(walkFileTree(repoDir, exceptDir))
       yield tree.traverse(v => Id(mapBranch(v))).asRight
@@ -189,12 +216,12 @@ object RepositoryReader:
       val metaPath = secret.payload
 
       blocking(Files.exists(metaPath)).flatMap { exists =>
-        if !exists then Err.StorageCorrupted(metaPath).asLeft[SecretPacket[RawMetadata]].pure[F]
+        if !exists then RepositoryErr.Corrupted(secret.name).asLeft.pure[F]
         else
           for raw <- blocking(Files.readString(metaPath))
           yield RawMetadata
             .fromString(raw)
-            .bimap(_ => Err.StorageCorrupted(metaPath), SecretPacket(secret.name, _))
+            .bimap(_ => RepositoryErr.Corrupted(secret.name), SecretPacket(secret.name, _))
       }
 
     override def loadFully(secret: SecretPacket[RawStoreLocations]): F[Result[SecretPacket[(RawSecretData, RawMetadata)]]] =
@@ -207,7 +234,8 @@ object RepositoryReader:
       val path = secret.payload
 
       blocking(Files.exists(path)).flatMap { exists =>
-        if !exists then Err.StorageCorrupted(path).asLeft[SecretPacket[RawSecretData]].pure[F]
+        if !exists then
+          RepositoryErr.Corrupted(secret.name).asLeft[SecretPacket[RawSecretData]].pure[F]
         else
           for raw <- blocking(Files.readAllBytes(path))
           yield SecretPacket(secret.name, RawSecretData.from(raw)).asRight

@@ -29,7 +29,8 @@ trait RepositoryConfigReader[F[_]]:
   def read(path: Path): F[Either[RepoMetaErr, RepositoryMetaConfig]]
 
 enum ProvisionErr:
-  case AlreadyExists, Undefined
+  case AlreadyExists(path: Path)
+  case Undefined
 
 trait Provisioner[F[_]] derives ApplyK:
   def provision(config: RepositoryMetaConfig): F[Either[ProvisionErr, Unit]]
@@ -43,10 +44,10 @@ object RepositoryProvisioner:
     val alg = MetaProvisioner(repoDir)
 
     val gitted: Provisioner[Mid[F, *]] = GitProvisioner[F](repoDir)
-    val logged: Provisioner[Mid[F, *]] = LoggingProvisioner[F]
-    val cs: Provisioner[Mid[F, *]]     = CypherProvisioner[F]
+    // val logged: Provisioner[Mid[F, *]] = LoggingProvisioner[F]
+    val cs: Provisioner[Mid[F, *]] = CypherProvisioner[F]
 
-    (cs |+| gitted |+| logged) attach alg
+    (cs |+| gitted) attach alg
 
   class CypherProvisioner[F[_]: Sync: Logger] extends Provisioner[Mid[F, *]] {
 
@@ -94,7 +95,7 @@ object RepositoryProvisioner:
 
     override def provision(config: RepositoryMetaConfig): F[Either[ProvisionErr, Unit]] =
       blocking(Files.exists(repoDir)).flatMap { exists =>
-        if exists then ProvisionErr.AlreadyExists.asLeft.pure[F]
+        if exists then ProvisionErr.AlreadyExists(repoDir).asLeft.pure[F]
         else {
           for
             _ <- blocking(Files.createDirectory(repoDir))

@@ -13,8 +13,6 @@ import alpasso.common.Logger
 
 enum CypherError:
   case InvalidCypher
-  case EncryptionError
-  case DecryptionError
 
 type Result[A] = Either[CypherError, A]
 
@@ -37,7 +35,7 @@ object CypherService:
       val encrypt = Process("gpg", Seq("--encrypt", "--recipient", fg, "--armor")) #< bis #> bos
       encrypt.!(silentLogger)
 
-      EitherT.pure(bos.toByteArray).value
+      EitherT.pure(bos.toByteArray).value // todo handle error
 
     override def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]] =
       val bis     = ByteArrayInputStream(raw)

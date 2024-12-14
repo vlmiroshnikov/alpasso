@@ -10,8 +10,8 @@ import cats.syntax.all.*
 import alpasso.cli
 import alpasso.cmdline.*
 import alpasso.cmdline.view.*
-import alpasso.cmdline.view.SessionTableView.given
 import alpasso.cmdline.view.SessionView.given
+import alpasso.cmdline.view.given
 import alpasso.common.*
 import alpasso.common.syntax.*
 import alpasso.core.model.*
@@ -37,7 +37,7 @@ object CliApp extends IOApp:
 
     def handle[T: Show](result: Result[T]): IO[ExitCode] =
       result match
-        case Left(e)  => IO.println(s"Error: $e").as(ExitCode.Error)
+        case Left(e) => IO.println(e.into().show).as(ExitCode.Error)
         case Right(r) => IO.println(r.show).as(ExitCode.Success)
 
     def provideCommand[A](f: Command[IO] => IO[Result[A]]): IO[Result[A]] =
@@ -85,7 +85,7 @@ object CliApp extends IOApp:
             val v = root.foldLeft(List.empty[SecretView]):
               case (agg, Branch.Empty(_))    => agg
               case (agg, Branch.Solid(_, a)) => agg :+ a
-            TableView(v.mapWithIndex((s, i) => TableRowView(i, s)))
+            TableView(v)
           }
           .value
           .value

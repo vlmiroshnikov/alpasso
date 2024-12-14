@@ -19,33 +19,32 @@ import alpasso.service.git.*
 import glass.*
 
 enum Err:
-  case AlreadyExists(name: SecretName)
+  case SecretRepoErr(err: RepositoryErr)
+
   case StorageNotInitialized(path: Path)
   case InconsistentStorage(reason: String)
   case StorageCorrupted(path: Path)
-  case SecretNotFound(name: SecretName)
-  case CypherErr
+
   case InternalErr
   case CommandSyntaxError(help: String)
   case UseSwitchCommand
+  case RepositoryProvisionErr(err: ProvisionErr)
 
 object Err:
-  given Upcast[Err, GitError]     = fromGitError
-  given Upcast[Err, RepoMetaErr]  = _ => Err.InternalErr
-  given Upcast[Err, ProvisionErr] = _ => Err.InternalErr
-  given Upcast[Err, CypherError]  = _ => Err.CypherErr
+  given Upcast[Err, RepositoryErr] = Err.SecretRepoErr(_)
 
-  private def fromGitError(ge: GitError): Err =
-    ge match
-      case GitError.RepositoryNotFound(path) => Err.StorageNotInitialized(path)
-      case GitError.RepositoryIsDirty        => Err.InconsistentStorage("repo is dirty")
-      case GitError.UnexpectedError          => Err.InternalErr
+  given Upcast[Err, RepoMetaErr] = _ => Err.InternalErr
+
+  given Upcast[Err, ProvisionErr] = e => Err.RepositoryProvisionErr(e)
+
+  given Upcast[Err, CypherError] = e => Err.SecretRepoErr(e.upcast)
+
 end Err
 
 def bootstrap[F[_]: Sync: Logger](repoDir: Path, version: SemVer, cypher: CypherAlg): F[Result[StorageView]] =
   val provisioner = RepositoryProvisioner.make(repoDir)
   val config      = RepositoryMetaConfig(version, cypher)
-  provisioner.provision(config).liftE[Err].map(_ => StorageView(repoDir)).value
+  provisioner.provision(config).liftE[Err].map(_ => StorageView(repoDir, cypher)).value
 
 trait Command[F[_]]:
 
@@ -125,8 +124,9 @@ object Command:
           exists <- catalog
                       .find(_.fold(false, _.name == name))
                       .flatMap(_.toOption)
-                      .toRight(Err.SecretNotFound(name))
-                      .toEitherT
+            .toRight(RepositoryErr.NotFound(name))
+            .pure[F]
+            .liftE[Err]
 
           toUpdate <- reader.loadFully(exists).liftE[Err]
 

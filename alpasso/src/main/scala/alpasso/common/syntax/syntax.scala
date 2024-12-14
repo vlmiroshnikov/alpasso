@@ -12,3 +12,9 @@ extension [F[_]: Functor, A, B](fa: F[Either[A, B]])
       using
       up: Upcast[E, A]): EitherT[F, E, B] =
     EitherT(fa).leftMap(a => up.upcast(a))
+
+extension [A](a: A)
+
+  def upcast[B](
+                 using
+                 up: Upcast[B, A]): B = up.upcast(a)

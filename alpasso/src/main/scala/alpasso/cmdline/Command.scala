@@ -94,8 +94,8 @@ object Command:
             Id(
               b.map(sm =>
                 SecretView(sm.name,
-                           MetadataView(sm.payload._2.into()).some,
-                           new String(sm.payload._1.byteArray).some
+                  new String(sm.payload._1.byteArray).some,
+                  sm.payload._2.into().some
                 )
               )
             )
@@ -106,11 +106,12 @@ object Command:
         name: SecretName,
         payload: SecretPayload,
         meta: Option[SecretMetadata]): F[Result[SecretView]] =
+      val rmd = meta.map(RawMetadata.from).getOrElse(RawMetadata.empty)
       val result =
         for
           data      <- cs.encrypt(payload.rawData).liftE[Err]
-          locations <- mutator.create(name, RawSecretData.from(data), RawMetadata.empty).liftE[Err]
-        yield SecretView(locations.name, meta.map(MetadataView(_)))
+          locations <- mutator.create(name, RawSecretData.from(data), rmd).liftE[Err]
+        yield SecretView(locations.name, None, meta)
 
       result.value
 
@@ -130,12 +131,12 @@ object Command:
 
           toUpdate <- reader.loadFully(exists).liftE[Err]
 
-          rsd      = payload.map(_.rawData).getOrElse(toUpdate.payload._1.byteArray)
-          metadata = meta.getOrElse(toUpdate.payload._2.into())
+          rsd = payload.map(_.rawData).getOrElse(toUpdate.payload._1.byteArray)
+          rmd = meta.map(RawMetadata.from).getOrElse(toUpdate.payload._2)
 
           sec       <- cs.encrypt(rsd).liftE[Err]
-          locations <- mutator.update(name, RawSecretData.from(sec), RawMetadata.empty).liftE[Err]
-        yield SecretView(locations.name, None)
+          locations <- mutator.update(name, RawSecretData.from(sec), rmd).liftE[Err]
+        yield SecretView(locations.name, None, None)
 
       result.value
 end Command

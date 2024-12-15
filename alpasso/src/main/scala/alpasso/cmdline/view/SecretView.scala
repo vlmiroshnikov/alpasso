@@ -1,7 +1,6 @@
 package alpasso.cmdline.view
 
 import cats.*
-import cats.syntax.all.*
 
 import alpasso.core.model.*
 
@@ -9,11 +8,12 @@ import Console.*
 
 case class SecretView(
     name: SecretName,
-    metadata: Option[MetadataView],
-    payload: Option[String] = None)
+    payload: Option[String] = None,
+    metadata: Option[SecretMetadata])
 
 object SecretView:
 
-  given Show[SecretView] = Show.show(s =>
-    s"${GREEN}${s.name}${RESET} ${BLUE_B}${s.payload.getOrElse("******")}${RESET} ${s.metadata.show}"
-  )
+  given Show[SecretView] = Show.show { s =>
+    val tags = s.metadata.fold("")(_.asMap.map((k, v) => s"$k=$v").mkString(","))
+    s"${GREEN}${s.name}${RESET} $BLUE${s.payload.getOrElse("******")}$RESET $YELLOW$tags$RESET"
+  }

@@ -1,6 +1,6 @@
 package alpasso.cmdline.view
 
-import scala.Console.{GREEN, RESET}
+import scala.Console.*
 
 import cats.*
 import cats.syntax.all.*
@@ -14,10 +14,11 @@ object TableView:
 
   given Show[TableView] = Show.show { tab =>
     val rows = tab.rows.zipWithIndex
-    val rw = rows.map(r =>
-      f"|${r._2}%2d | ${GREEN}${r._1.name}%-40s${RESET} | ${r._1.payload.getOrElse("*******")}%-12s | ${r._1.metadata.show}%-24s |"
-    )
-    val stroke = "|" + "-".repeat(88) + "|"
+    val rw = rows.map { r =>
+      val tags = r._1.metadata.fold("")(_.asMap.map((k, v) => s"${k}=${v}").mkString(","))
+      f"|${r._2}%2d | ${GREEN}${r._1.name}%-40s${RESET} | ${r._1.payload.getOrElse("*******")}%-12s | ${YELLOW}${tags}%-64s${RESET} |"
+    }
+    val stroke = "|" + "-".repeat(128) + "|"
     (stroke +: rw :+ stroke).mkString("\n")
   }
 

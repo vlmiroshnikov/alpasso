@@ -70,11 +70,11 @@ object CliApp extends IOApp:
       case Right(Action.New(sn, sp, sm)) =>
         provideCommand(_.create(sn, sp.getOrElse(SecretPayload.empty), sm)) >>= handle
 
-      case Right(Action.Filter(where, OutputFormat.Tree)) =>
-        provideCommand(_.filter(where)) >>= handle
-
       case Right(Action.Patch(sn, spOpt, smOpt)) =>
         provideCommand(_.patch(sn, spOpt, smOpt)) >>= handle
+
+      case Right(Action.Filter(where, OutputFormat.Tree)) =>
+        provideCommand(_.filter(where)) >>= handle
 
       case Right(Action.Filter(where, OutputFormat.Table)) =>
         val res = provideCommand(_.filter(where))

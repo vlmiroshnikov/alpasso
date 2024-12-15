@@ -12,6 +12,9 @@ opaque type RawMetadata = Map[String, String]
 
 object RawMetadata:
 
+  def from(meta: SecretMetadata): RawMetadata =
+    of(meta.asMap)
+
   def fromString(raw: String): Either[Exception, RawMetadata] =
     if raw.nonEmpty then parser.parse(raw).flatMap(_.as[Map[String, String]])
     else RawMetadata.empty.asRight

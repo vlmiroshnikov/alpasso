@@ -24,6 +24,9 @@ opaque type SecretMetadata = Map[String, String]
 object SecretMetadata:
   given Show[SecretMetadata] = Show.show(_.mkString(","))
 
+  extension (sm: SecretMetadata)
+    def asMap: Map[String, String] = sm
+
   def from(m: Map[String, String]): SecretMetadata = m
 
   def fromRaw(s: String): ValidatedNel[String, SecretMetadata] =

@@ -13,7 +13,6 @@ import alpasso.common.{ Logger, Result, SemVer }
 import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
-import alpasso.service.fs.RepositoryErr.fromGitError
 import alpasso.service.fs.model.{ Branch, * }
 import alpasso.service.git.{GitError, GitRepo}
 

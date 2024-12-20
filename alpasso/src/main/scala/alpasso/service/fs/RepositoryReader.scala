@@ -44,7 +44,6 @@ enum RepositoryErr:
 
 object RepositoryErr:
   given Upcast[RepositoryErr, GitError] = fromGitError
-
   given Upcast[RepositoryErr, CypherError] = _ => RepositoryErr.Inconsistent("Invalid cypher")
 
   private def fromGitError(ge: GitError): RepositoryErr =
@@ -58,14 +57,17 @@ object RepositoryErr:
 type Result[+T] = Either[RepositoryErr, T]
 
 trait RepositoryMutator[F[_]] derives ApplyK:
-  def create(name: SecretName, payload: RawSecretData, meta: RawMetadata): F[Result[SecretPacket[RawStoreLocations]]]
-  def update(name: SecretName, payload: RawSecretData, meta: RawMetadata): F[Result[SecretPacket[RawStoreLocations]]]
+  def create(name: SecretName, payload: RawSecretData, meta: RawMetadata): F[Result[RawStoreLocations]]
+
+  def update(name: SecretName, payload: RawSecretData, meta: RawMetadata): F[Result[RawStoreLocations]]
+
+  def remove(name: SecretName): F[Result[RawStoreLocations]]
 
 object RepositoryMutator:
 
   def make[F[_]: Async: Logger](config: RepositoryConfiguration): RepositoryMutator[F] =
     val gitted: RepositoryMutator[Mid[F, *]] = Gitted[F](config.repoDir)
-    (gitted) attach Impl[F](config.repoDir)
+    gitted attach Impl[F](config.repoDir)
 
   class Impl[F[_]: Logger: Sync as F](repoDir: Path) extends RepositoryMutator[F] {
 
@@ -76,7 +78,23 @@ object RepositoryMutator:
     val CreateOps: List[OpenOption] = List(CREATE_NEW, WRITE)
     val UpdateOps: List[OpenOption] = List(CREATE, TRUNCATE_EXISTING, WRITE)
 
-    override def create(name: SecretName, payload: RawSecretData, meta: RawMetadata): F[Result[SecretPacket[RawStoreLocations]]] =
+    override def remove(name: SecretName): F[Result[RawStoreLocations]] =
+      val path = repoDir.resolve(name)
+
+      val metaPath = path.resolve("meta")
+      val payloadPath = path.resolve("payload")
+
+      blocking(exists(payloadPath)).flatMap { rootExists =>
+        if !rootExists then RepositoryErr.NotFound(name).asLeft.pure[F]
+        else
+          for
+            _ <- blocking(Files.deleteIfExists(metaPath))
+            _ <- blocking(Files.deleteIfExists(payloadPath))
+            _ <- blocking(Files.deleteIfExists(path)).whenA(Files.list(path).count() == 0)
+          yield RawStoreLocations(payloadPath, metaPath).asRight
+      }
+
+    override def create(name: SecretName, payload: RawSecretData, meta: RawMetadata): F[Result[RawStoreLocations]] =
       val path = repoDir.resolve(name)
 
       val metaPath    = path.resolve("meta")
@@ -89,10 +107,10 @@ object RepositoryMutator:
             _ <- blocking(createDirectories(path))
             _ <- blocking(write(payloadPath, payload.byteArray, CreateOps *))
             _ <- blocking(writeString(metaPath, meta.rawString, CreateOps *))
-          yield SecretPacket(name, RawStoreLocations(payloadPath, metaPath)).asRight
+          yield RawStoreLocations(payloadPath, metaPath).asRight
       }
 
-    override def update(name: SecretName, payload: RawSecretData, metadata: RawMetadata): F[Result[SecretPacket[RawStoreLocations]]] =
+    override def update(name: SecretName, payload: RawSecretData, metadata: RawMetadata): F[Result[RawStoreLocations]] =
       val path = repoDir.resolve(name)
 
       val metaPath    = path.resolve("meta")
@@ -104,36 +122,47 @@ object RepositoryMutator:
           for
             _ <- blocking(write(payloadPath, payload.byteArray, UpdateOps *))
             _ <- blocking(writeString(metaPath, metadata.rawString, UpdateOps *))
-          yield SecretPacket(name, RawStoreLocations(payloadPath, metaPath)).asRight
+          yield RawStoreLocations(payloadPath, metaPath).asRight
       }
   }
 
   class Gitted[F[_]: Sync](repoDir: Path) extends RepositoryMutator[Mid[F, *]] {
 
-    override def create(name: SecretName, payload: RawSecretData, meta: RawMetadata): Mid[F, Result[SecretPacket[RawStoreLocations]]] =
+    override def create(name: SecretName, payload: RawSecretData, meta: RawMetadata): Mid[F, Result[RawStoreLocations]] =
       action => {
         GitRepo.openExists(repoDir).use { git =>
           val commitMsg = s"Add secret $name"
           (for
             locations <- EitherT(action)
-            files = NonEmptyList.of(locations.payload.secretData, locations.payload.metadata)
+            files = NonEmptyList.of(locations.secretData, locations.metadata)
             _ <- git.commitFiles(files, commitMsg).liftE[RepositoryErr]
           yield locations).value
         }
       }
 
-    override def update(name: SecretName, payload: RawSecretData, meta: RawMetadata): Mid[F, Result[SecretPacket[RawStoreLocations]]] =
+    override def update(name: SecretName, payload: RawSecretData, meta: RawMetadata): Mid[F, Result[RawStoreLocations]] =
       action => {
         GitRepo.openExists(repoDir).use { git =>
           val commitMsg = s"Update secret $name"
           (for
             locations <- EitherT(action)
-            files = NonEmptyList.of(locations.payload.secretData, locations.payload.metadata)
+            files = NonEmptyList.of(locations.secretData, locations.metadata)
             _ <- git.commitFiles(files, commitMsg).liftE[RepositoryErr]
           yield locations).value
         }
       }
 
+    override def remove(name: SecretName): Mid[F, Result[RawStoreLocations]] =
+      action => {
+        GitRepo.openExists(repoDir).use { git =>
+          val commitMsg = s"Remove secret $name"
+          (for
+            locations <- EitherT(action)
+            files = NonEmptyList.of(locations.secretData, locations.metadata)
+            _ <- git.removeFiles(files, commitMsg).liftE[RepositoryErr]
+          yield locations).value
+        }
+      }
   }
 
 trait RepositoryReader[F[_]] derives ApplyK:
@@ -167,7 +196,7 @@ object RepositoryReader:
     override def loadFully(secret: SecretPacket[RawStoreLocations]): Mid[F, Result[SecretPacket[(RawSecretData, RawMetadata)]]] =
       action =>
         (for
-          d: SecretPacket[(RawSecretData, RawMetadata)] <- EitherT(action)
+          d <- EitherT(action)
           r <- cs.decrypt(d.payload._1.byteArray).liftE[RepositoryErr]
         yield d.copy(payload = (RawSecretData.from(r), d.payload._2))).value
 

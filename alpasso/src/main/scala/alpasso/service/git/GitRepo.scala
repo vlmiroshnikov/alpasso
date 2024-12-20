@@ -25,6 +25,8 @@ trait GitRepo[F[_]]:
   def verify: F[Either[GitError, Unit]]
   def commitFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]]
 
+  def removeFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]]
+
 object GitRepo:
 
   def openExists[F[_]: Sync as F](repoDir: Path): Resource[F, GitRepo[F]] =
@@ -78,6 +80,21 @@ object GitRepo:
           .map(file => Repository.stripWorkDir(repository.getWorkTree, file.toFile))
           .traverse(file => Try(addCommand.addFilepattern(file)).toEither)
         addCommand.call()
+
+        git
+          .commit()
+          .setMessage(message)
+          .call()
+          .asRight
+
+    override def removeFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]] =
+      blocking:
+        val git = new Git(repository)
+        val rmCmd = git.rm()
+        files
+          .map(file => Repository.stripWorkDir(repository.getWorkTree, file.toFile))
+          .traverse(file => Try(rmCmd.addFilepattern(file)).toEither)
+        rmCmd.call()
 
         git
           .commit()

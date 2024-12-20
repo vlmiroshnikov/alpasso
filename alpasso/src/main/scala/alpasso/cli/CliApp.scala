@@ -70,6 +70,9 @@ object CliApp extends IOApp:
       case Right(Action.New(sn, sp, sm)) =>
         provideCommand(_.create(sn, sp.getOrElse(SecretPayload.empty), sm)) >>= handle
 
+      case Right(Action.Remove(sn)) =>
+        provideCommand(_.remove(sn)) >>= handle
+
       case Right(Action.Patch(sn, spOpt, smOpt)) =>
         provideCommand(_.patch(sn, spOpt, smOpt)) >>= handle
 

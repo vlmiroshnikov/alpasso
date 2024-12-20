@@ -14,7 +14,6 @@ import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
 import alpasso.service.fs.model.{ Branch, * }
-import alpasso.service.git.*
 
 import glass.*
 
@@ -57,6 +56,8 @@ trait Command[F[_]]:
       name: SecretName,
       payload: Option[SecretPayload],
       meta: Option[SecretMetadata]): F[Result[SecretView]]
+
+  def remove(name: SecretName): F[Result[SecretView]]
 
   def filter(filter: SecretFilter): F[Result[Option[Node[Branch[SecretView]]]]]
 
@@ -111,7 +112,21 @@ object Command:
         for
           data      <- cs.encrypt(payload.rawData).liftE[Err]
           locations <- mutator.create(name, RawSecretData.from(data), rmd).liftE[Err]
-        yield SecretView(locations.name, None, meta)
+        yield SecretView(name, None, meta)
+
+      result.value
+
+    override def remove(name: SecretName): F[Result[SecretView]] =
+      val result = for
+        catalog <- reader.walkTree.liftE[Err]
+        exists <- catalog
+          .find(_.fold(false, _.name == name))
+          .flatMap(_.toOption)
+          .toRight(RepositoryErr.NotFound(name))
+          .pure[F]
+          .liftE[Err]
+        _ <- mutator.remove(exists.name).liftE[Err]
+      yield SecretView(name, None, None)
 
       result.value
 
@@ -136,7 +151,7 @@ object Command:
 
           sec       <- cs.encrypt(rsd).liftE[Err]
           locations <- mutator.update(name, RawSecretData.from(sec), rmd).liftE[Err]
-        yield SecretView(locations.name, None, None)
+        yield SecretView(name, None, None)
 
       result.value
 end Command

@@ -20,6 +20,7 @@ enum Action:
   case New(name: SecretName, secret: Option[SecretPayload], meta: Option[SecretMetadata])
   case Patch(name: SecretName, payload: Option[SecretPayload], meta: Option[SecretMetadata])
   case Filter(where: SecretFilter, format: OutputFormat)
+  case Remove(name: SecretName)
 
 object ArgParser:
 
@@ -77,8 +78,13 @@ object ArgParser:
     )
   }
 
+  val remove: Opts[Action] = Opts.subcommand("rm", "Remove secret") {
+    val name = Opts.argument("name").mapValidated(SecretName.of)
+    name.map(Action.Remove(_))
+  }
+
   val command: Command[Action] =
-    Command("alpasso", "header", true)(repos orElse add orElse list orElse patch)
+    Command("alpasso", "header", true)(repos orElse add orElse remove orElse list orElse patch)
 
 @main
 def parse(): Unit = {

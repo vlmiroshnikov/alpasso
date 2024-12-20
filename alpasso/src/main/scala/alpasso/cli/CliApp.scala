@@ -40,13 +40,15 @@ object CliApp extends IOApp:
         case Left(e) => IO.println(e.into().show).as(ExitCode.Error)
         case Right(r) => IO.println(r.show).as(ExitCode.Success)
 
-    def provideCommand[A](f: Command[IO] => IO[Result[A]]): IO[Result[A]] =
+    def provideConfig[A](f: RepositoryConfiguration => IO[Result[A]]): IO[Result[A]] =
       (for
         session <- EitherT.fromOptionF(smgr.current(), Err.UseSwitchCommand)
-        cfg     <- rmr.read(session.path).liftE[Err]
-        configuration = RepositoryConfiguration(session.path, cfg.version, cfg.cryptoAlg)
-        result <- f(Command.make[IO](configuration)).liftE[Err]
+        cfg <- rmr.read(session.path).liftE[Err]
+        result <- f(RepositoryConfiguration(session.path, cfg.version, cfg.cryptoAlg)).liftE[Err]
       yield result).value
+
+    def provideCommand[A](f: Command[IO] => IO[Result[A]]): IO[Result[A]] =
+      provideConfig(config => f(Command.make[IO](config)))
 
     ArgParser.command.parse(args) match
       case Left(help) =>
@@ -59,6 +61,7 @@ object CliApp extends IOApp:
             (bootstrap[IO](path, SemVer.zero, cypher) <* smgr.setup(Session(path))) >>= handle
 
           case RepoOps.List => smgr.listAll().map(_.into().asRight[Err]) >>= handle
+          case RepoOps.Log => provideConfig(historyLog) >>= handle
           case RepoOps.Switch(sel) =>
             val switch = OptionT(smgr.listAll().map(_.zipWithIndex.find((_, idx) => idx == sel)))
               .cataF(

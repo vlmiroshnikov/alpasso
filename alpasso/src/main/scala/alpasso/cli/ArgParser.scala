@@ -14,6 +14,7 @@ enum RepoOps:
   case Init(path: Option[Path], cypher: CypherAlg)
   case List
   case Switch(index: Int)
+  case Log
 
 enum Action:
   case Repo(ops: RepoOps)
@@ -42,7 +43,11 @@ object ArgParser:
       path.map(RepoOps.Switch.apply)
     }
 
-    (init orElse list orElse switch).map(Action.Repo.apply)
+    val log = Opts.subcommand("log", "log repository") {
+      Opts.apply(RepoOps.Log)
+    }
+
+    (init orElse list orElse switch orElse log).map(Action.Repo.apply)
   }
 
   val add: Opts[Action] = Opts.subcommand("new", "Add new secret") {

@@ -46,7 +46,7 @@ object RepositoryErr:
   given Upcast[RepositoryErr, GitError] = fromGitError
   given Upcast[RepositoryErr, CypherError] = _ => RepositoryErr.Inconsistent("Invalid cypher")
 
-  private def fromGitError(ge: GitError): RepositoryErr =
+  def fromGitError(ge: GitError): RepositoryErr =
     ge match
       case GitError.RepositoryNotFound(path) =>
         RepositoryErr.Inconsistent("Git repository not initialized")

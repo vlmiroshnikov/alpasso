@@ -13,7 +13,9 @@ import alpasso.common.{ Logger, Result, SemVer }
 import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
+import alpasso.service.fs.RepositoryErr.fromGitError
 import alpasso.service.fs.model.{ Branch, * }
+import alpasso.service.git.{GitError, GitRepo}
 
 import glass.*
 
@@ -45,6 +47,15 @@ def bootstrap[F[_]: Sync: Logger](repoDir: Path, version: SemVer, cypher: Cypher
   val config      = RepositoryMetaConfig(version, cypher)
   provisioner.provision(config).liftE[Err].map(_ => StorageView(repoDir, cypher)).value
 
+def historyLog[F[_] : Sync](configuration: RepositoryConfiguration): F[Result[HistoryLogView]] =
+  GitRepo.openExists(configuration.repoDir).use { git =>
+    import RepositoryErr.*
+    given Upcast[Err, GitError] =
+      ge => summon[Upcast[Err, RepositoryErr]].upcast(fromGitError(ge)) // todo fix it
+
+    git.history().nested.map(v => HistoryLogView.from(v.commits)).value.liftE[Err].value
+  }
+
 trait Command[F[_]]:
 
   def create(
@@ -58,7 +69,6 @@ trait Command[F[_]]:
       meta: Option[SecretMetadata]): F[Result[SecretView]]
 
   def remove(name: SecretName): F[Result[SecretView]]
-
   def filter(filter: SecretFilter): F[Result[Option[Node[Branch[SecretView]]]]]
 
 object Command:

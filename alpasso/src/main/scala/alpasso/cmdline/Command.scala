@@ -7,9 +7,9 @@ import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
 
-import alpasso.cmdline.view.*
+import alpasso.cmdline.view.{*, given}
 import alpasso.common.syntax.*
-import alpasso.common.{ Logger, Result, SemVer }
+import alpasso.common.{Logger, RawPackage, Result, SemVer}
 import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
@@ -38,7 +38,6 @@ object Err:
   given Upcast[Err, ProvisionErr] = e => Err.RepositoryProvisionErr(e)
 
   given Upcast[Err, CypherError] = e => Err.SecretRepoErr(e.upcast)
-
 end Err
 
 def bootstrap[F[_]: Sync: Logger](repoDir: Path, version: SemVer, cypher: CypherAlg): F[Result[StorageView]] =
@@ -87,30 +86,20 @@ object Command:
       extends Command[F]:
 
     override def filter(filter: SecretFilter): F[Result[Option[Node[Branch[SecretView]]]]] =
-      def predicate(s: SecretPacket[(RawSecretData, RawMetadata)]): Boolean =
+      def predicate(p: RawPackage): Boolean =
         filter match
-          case SecretFilter.Grep(pattern) => s.name.contains(pattern)
+          case SecretFilter.Grep(pattern) => p.name.contains(pattern)
           case SecretFilter.Empty         => true
 
-      def load(s: SecretPacket[RawStoreLocations]) =
+      def load(s: SecretPackage[RawStoreLocations]) =
         reader.loadFully(s).liftE[Err]
 
-      (for
+      val result = for
         rawTree <- reader.walkTree.liftE[Err]
-        tree    <- rawTree.traverse(branch => branch.traverse(load))
-      yield cutTree(tree, predicate)
-        .map(
-          _.traverse(b =>
-            Id(
-              b.map(sm =>
-                SecretView(sm.name,
-                  new String(sm.payload._1.byteArray).some,
-                  sm.payload._2.into().some
-                )
-              )
-            )
-          )
-        )).value
+        tree <- rawTree.traverse(_.traverse(load))
+      yield cutTree(tree, predicate).map(_.traverse(b => Id(b.map(_.into()))))
+
+      result.value
 
     override def create(
         name: SecretName,

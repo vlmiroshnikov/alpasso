@@ -1,13 +1,17 @@
 package alpasso.common
 
 import alpasso.cmdline.Err
+import alpasso.core.model.SecretPackage
+import alpasso.service.fs.model.{RawMetadata, RawSecretData}
 
 import logstage.LogIO
 
 type Logger[F[_]] = LogIO[F]
 type Result[A]    = Either[Err, A]
 
-trait Converter[-T, +U] extends (T => U):
-  def apply(x: T): U
+type RawPackage = SecretPackage[(RawSecretData, RawMetadata)]
 
-  extension (x: T) def into(): U = this(x)
+trait Converter[-From, +To] extends (From => To):
+  def apply(x: From): To
+
+  extension (x: From) def into(): To = this (x)

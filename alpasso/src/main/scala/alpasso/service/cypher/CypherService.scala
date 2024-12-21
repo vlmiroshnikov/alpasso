@@ -24,27 +24,36 @@ trait CypherService[F[_]]:
 
 object CypherService:
 
-  private class GpgImpl[F[_]: Sync](fg: String) extends CypherService[F]:
+  private class GpgImpl[F[_] : Sync as S](fg: String) extends CypherService[F]:
+
+    import S.blocking
 
     private val silentLogger =
       ProcessLogger(fout => println(s"FOUT: ${fout}"), ferr => println(s"FERRL ${ferr}"))
 
     override def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]] =
-      val bis     = ByteArrayInputStream(raw)
-      val bos     = ByteArrayOutputStream()
-      val encrypt = Process("gpg", Seq("--encrypt", "--recipient", fg, "--armor")) #< bis #> bos
-      encrypt.!(silentLogger)
+      val bis = ByteArrayInputStream(raw)
+      val bos = ByteArrayOutputStream()
+      val encrypt =
+        Process("gpg", Seq("--encrypt", "--quiet", "--recipient", fg, "--armor")) #< bis #> bos
 
-      EitherT.pure(bos.toByteArray).value // todo handle error
+      val result =
+        for rcode <- blocking(encrypt.!(silentLogger))
+          yield Either.cond(rcode == 0, bos.toByteArray, CypherError.InvalidCypher)
+
+      EitherT(result).value
 
     override def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]] =
-      val bis     = ByteArrayInputStream(raw)
-      val bos     = ByteArrayOutputStream()
-      val decrypt = Process("gpg", Seq("--decrypt", "--recipient", fg, "--armor")) #< bis #> bos
+      val bis = ByteArrayInputStream(raw)
+      val bos = ByteArrayOutputStream()
+      val decrypt =
+        Process("gpg", Seq("--decrypt", "--quiet", "--recipient", fg, "--armor")) #< bis #> bos
 
-      decrypt.!(silentLogger)
+      val result =
+        for rcode <- blocking(decrypt.!(silentLogger))
+          yield Either.cond(rcode == 0, bos.toByteArray, CypherError.InvalidCypher)
 
-      EitherT.pure(bos.toByteArray).value
+      EitherT(result).value
 
   def empty[F[_]: Applicative]: CypherService[F] = new CypherService[F]:
     override def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]] = raw.asRight.pure

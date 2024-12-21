@@ -1,6 +1,7 @@
 package alpasso.service.git
 
 import java.nio.file.*
+import java.time.Instant
 
 import scala.jdk.CollectionConverters.*
 import scala.util.*
@@ -24,7 +25,7 @@ enum GitError extends Throwable with NoStackTrace:
 
 type Result[T] = Either[GitError, T]
 
-case class LogRecord(hex: String, comment: String)
+case class LogRecord(hex: String, time: Instant, comment: String)
 case class HistoryLog(commits: List[LogRecord])
 
 trait GitRepo[F[_]]:
@@ -82,7 +83,11 @@ object GitRepo:
       blocking:
         val git   = new Git(repository)
         val items = git.log().call().asScala.toList
-        HistoryLog(items.map(v => LogRecord(v.getId.name(), v.getFullMessage))).asRight
+        HistoryLog(
+          items.map(v =>
+            LogRecord(v.getId.name(), Instant.ofEpochSecond(v.getCommitTime), v.getFullMessage)
+          )
+        ).asRight
 
     override def commitFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]] =
       blocking:

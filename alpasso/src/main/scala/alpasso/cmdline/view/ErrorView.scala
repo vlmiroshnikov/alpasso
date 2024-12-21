@@ -23,9 +23,7 @@ given Converter[Err, ErrorView] =
   case Err.SecretRepoErr(inner) =>
     inner match
       case RepositoryErr.AlreadyExists(name) =>
-        ErrorView(
-          s"${RED}Secret ${RESET}${BLUE}[${name.show}]${RESET} ${RED}is already exists${RESET}"
-        )
+        ErrorView(s"${RED}Secret $RESET $BLUE[${name.show}]$RESET ${RED}is already exists$RESET")
       case RepositoryErr.NotFound(name) =>
         ErrorView(s"${RED}Secret ${RESET}${BLUE}[${name.show}]${RESET} ${RED}not found${RESET}")
       case ee => ErrorView(s"Undefined error: ${ee}")

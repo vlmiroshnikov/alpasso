@@ -18,7 +18,7 @@ object TableView:
       val tags = r._1.metadata.fold("")(_.asMap.map((k, v) => s"${k}=${v}").mkString(","))
       f"|${r._2}%2d | ${GREEN}${r._1.name}%-40s${RESET} | ${r._1.payload.getOrElse("*******")}%-12s | ${YELLOW}${tags}%-64s${RESET} |"
     }
-    val stroke = "|" + "-".repeat(128) + "|"
+    val stroke = "+" + "-".repeat(128) + "+"
     (stroke +: rw :+ stroke).mkString("\n")
   }
 

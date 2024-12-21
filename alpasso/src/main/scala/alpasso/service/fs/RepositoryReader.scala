@@ -131,7 +131,7 @@ object RepositoryMutator:
     override def create(name: SecretName, payload: RawSecretData, meta: RawMetadata): Mid[F, Result[RawStoreLocations]] =
       action => {
         GitRepo.openExists(repoDir).use { git =>
-          val commitMsg = s"Add secret $name"
+          val commitMsg = s"Add secret [$name]"
           (for
             locations <- EitherT(action)
             files = NonEmptyList.of(locations.secretData, locations.metadata)
@@ -143,7 +143,7 @@ object RepositoryMutator:
     override def update(name: SecretName, payload: RawSecretData, meta: RawMetadata): Mid[F, Result[RawStoreLocations]] =
       action => {
         GitRepo.openExists(repoDir).use { git =>
-          val commitMsg = s"Update secret $name"
+          val commitMsg = s"Update secret [$name]"
           (for
             locations <- EitherT(action)
             files = NonEmptyList.of(locations.secretData, locations.metadata)
@@ -155,7 +155,7 @@ object RepositoryMutator:
     override def remove(name: SecretName): Mid[F, Result[RawStoreLocations]] =
       action => {
         GitRepo.openExists(repoDir).use { git =>
-          val commitMsg = s"Remove secret $name"
+          val commitMsg = s"Remove secret [$name]"
           (for
             locations <- EitherT(action)
             files = NonEmptyList.of(locations.secretData, locations.metadata)
@@ -167,11 +167,8 @@ object RepositoryMutator:
 
 trait RepositoryReader[F[_]] derives ApplyK:
   def loadPayload(secret: SecretPackage[Path]): F[Result[SecretPackage[RawSecretData]]]
-
   def loadMeta(secret: SecretPackage[Path]): F[Result[SecretPackage[RawMetadata]]]
-
   def loadFully(secret: SecretPackage[RawStoreLocations]): F[Result[SecretPackage[(RawSecretData, RawMetadata)]]]
-
   def walkTree: F[Result[Node[Branch[SecretPackage[RawStoreLocations]]]]]
 
 object RepositoryReader:

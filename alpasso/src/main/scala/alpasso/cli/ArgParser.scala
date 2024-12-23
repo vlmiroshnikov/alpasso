@@ -14,12 +14,14 @@ enum RepoOps:
   case Init(path: Option[Path], cypher: CypherAlg)
   case List
   case Switch(index: Int)
+  case Log
 
 enum Action:
   case Repo(ops: RepoOps)
   case New(name: SecretName, secret: Option[SecretPayload], meta: Option[SecretMetadata])
   case Patch(name: SecretName, payload: Option[SecretPayload], meta: Option[SecretMetadata])
   case Filter(where: SecretFilter, format: OutputFormat)
+  case Remove(name: SecretName)
 
 object ArgParser:
 
@@ -41,7 +43,11 @@ object ArgParser:
       path.map(RepoOps.Switch.apply)
     }
 
-    (init orElse list orElse switch).map(Action.Repo.apply)
+    val log = Opts.subcommand("log", "log repository") {
+      Opts.apply(RepoOps.Log)
+    }
+
+    (init orElse list orElse switch orElse log).map(Action.Repo.apply)
   }
 
   val add: Opts[Action] = Opts.subcommand("new", "Add new secret") {
@@ -77,8 +83,13 @@ object ArgParser:
     )
   }
 
+  val remove: Opts[Action] = Opts.subcommand("rm", "Remove secret") {
+    val name = Opts.argument("name").mapValidated(SecretName.of)
+    name.map(Action.Remove(_))
+  }
+
   val command: Command[Action] =
-    Command("alpasso", "header", true)(repos orElse add orElse list orElse patch)
+    Command("alpasso", "header", true)(repos orElse add orElse remove orElse list orElse patch)
 
 @main
 def parse(): Unit = {

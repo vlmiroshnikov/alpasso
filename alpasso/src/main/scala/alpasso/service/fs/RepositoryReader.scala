@@ -58,9 +58,7 @@ type Result[+T] = Either[RepositoryErr, T]
 
 trait RepositoryMutator[F[_]] derives ApplyK:
   def create(name: SecretName, payload: RawSecretData, meta: RawMetadata): F[Result[RawStoreLocations]]
-
   def update(name: SecretName, payload: RawSecretData, meta: RawMetadata): F[Result[RawStoreLocations]]
-
   def remove(name: SecretName): F[Result[RawStoreLocations]]
 
 object RepositoryMutator:

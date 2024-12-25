@@ -28,12 +28,10 @@ def draw(root: Node[String]): List[String] =
   def drawSubTrees(s: List[Node[String]]): List[String] =
     s match
       case Nil      => Nil
-      case t :: Nil =>  shift("└── ", "  ", draw(t))
-      case t :: ts  =>  shift("├── ", "| ", draw(t)) ++ drawSubTrees(ts)
+      case t :: Nil => shift("╰─ ", "   ", draw(t))
+      case t :: ts  => shift("├─ ", "│  ", draw(t)) ++ drawSubTrees(ts)
 
   def shift(first: String, other: String, s: List[String]): List[String] =
     s.zip(first #:: LazyList.continually(other)).map((a, b) => b.concat(a))
 
   root.data :: drawSubTrees(root.siblings.toList)
-
-

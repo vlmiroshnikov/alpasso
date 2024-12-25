@@ -1,8 +1,23 @@
-## sbt project compiled with Scala 3
+# Alpasso - Secret Management Tool
 
-### Usage
+Alpasso is a secret management tool built with Scala 3 (native image). It provides a robust command-line interface for
+managing sensitive information with features like hierarchical storage, tagging, and flexible viewing options.
 
-This is a normal sbt project. You can compile code with `sbt compile`, run it with `sbt run`, and `sbt console` will start a Scala 3 REPL.
+## Features
 
-For more information on the sbt-dotty plugin, see the
-[scala3-example-project](https://github.com/scala/scala3-example-project/blob/main/README.md).
+- **Secure Storage**: Safely store and manage sensitive information with OpenGPG
+- **Hierarchical Structure**: Organize secrets in a tree-like structure for better management
+- **Native Image Support**: GraalVM native image support for better performance
+
+## Technology Stack
+
+- Scala 3
+- cats & cats-effect for functional programming
+- GraalVM native image for native compilation
+
+## Building and Running
+
+This is a standard sbt project. You can:
+
+- Compile: `sbt compile`
+- Build native image: `sbt alpasso/nativeImage`

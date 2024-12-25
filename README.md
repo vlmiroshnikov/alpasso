@@ -12,8 +12,8 @@ managing sensitive information with features like hierarchical storage, tagging,
 ## Technology Stack
 
 - Scala 3
-- cats & cats-effect for functional programming
-- GraalVM native image for native compilation
+- cats & cats-effect 
+- GraalVM native image
 
 ## Building and Running
 

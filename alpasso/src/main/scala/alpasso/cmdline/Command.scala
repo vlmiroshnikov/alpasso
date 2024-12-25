@@ -7,14 +7,14 @@ import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
 
-import alpasso.cmdline.view.{*, given}
+import alpasso.cmdline.view.{ *, given }
 import alpasso.common.syntax.*
-import alpasso.common.{Logger, RawPackage, Result, SemVer}
+import alpasso.common.{ Logger, RawPackage, Result, SemVer }
 import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
 import alpasso.service.fs.model.{ Branch, * }
-import alpasso.service.git.{GitError, GitRepo}
+import alpasso.service.git.{ GitError, GitRepo }
 
 import glass.*
 
@@ -45,7 +45,7 @@ def bootstrap[F[_]: Sync: Logger](repoDir: Path, version: SemVer, cypher: Cypher
   val config      = RepositoryMetaConfig(version, cypher)
   provisioner.provision(config).liftE[Err].map(_ => StorageView(repoDir, cypher)).value
 
-def historyLog[F[_] : Sync](configuration: RepositoryConfiguration): F[Result[HistoryLogView]] =
+def historyLog[F[_]: Sync](configuration: RepositoryConfiguration): F[Result[HistoryLogView]] =
   GitRepo.openExists(configuration.repoDir).use { git =>
     import RepositoryErr.*
     given Upcast[Err, GitError] =
@@ -96,7 +96,7 @@ object Command:
 
       val result = for
         rawTree <- reader.walkTree.liftE[Err]
-        tree <- rawTree.traverse(_.traverse(load))
+        tree    <- rawTree.traverse(_.traverse(load))
       yield cutTree(tree, predicate).map(_.traverse(b => Id(b.map(_.into()))))
 
       result.value
@@ -118,11 +118,11 @@ object Command:
       val result = for
         catalog <- reader.walkTree.liftE[Err]
         exists <- catalog
-          .find(_.fold(false, _.name == name))
-          .flatMap(_.toOption)
-          .toRight(RepositoryErr.NotFound(name))
-          .pure[F]
-          .liftE[Err]
+                    .find(_.fold(false, _.name == name))
+                    .flatMap(_.toOption)
+                    .toRight(RepositoryErr.NotFound(name))
+                    .pure[F]
+                    .liftE[Err]
         _ <- mutator.remove(exists.name).liftE[Err]
       yield SecretView(name, None, None)
 
@@ -138,9 +138,9 @@ object Command:
           exists <- catalog
                       .find(_.fold(false, _.name == name))
                       .flatMap(_.toOption)
-            .toRight(RepositoryErr.NotFound(name))
-            .pure[F]
-            .liftE[Err]
+                      .toRight(RepositoryErr.NotFound(name))
+                      .pure[F]
+                      .liftE[Err]
 
           toUpdate <- reader.loadFully(exists).liftE[Err]
 

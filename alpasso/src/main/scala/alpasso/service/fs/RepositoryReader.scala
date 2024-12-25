@@ -24,9 +24,9 @@ import alpasso.common.Logger
 import alpasso.common.syntax.*
 import alpasso.core.model.*
 import alpasso.service.cypher
-import alpasso.service.cypher.{CypherError, CypherService}
+import alpasso.service.cypher.{ CypherError, CypherService }
 import alpasso.service.fs.model.*
-import alpasso.service.git.{GitError, GitRepo}
+import alpasso.service.git.{ GitError, GitRepo }
 
 import glass.Upcast
 import io.circe.{ Decoder, Encoder, Json }
@@ -43,7 +43,7 @@ enum RepositoryErr:
   case Undefiled
 
 object RepositoryErr:
-  given Upcast[RepositoryErr, GitError] = fromGitError
+  given Upcast[RepositoryErr, GitError]    = fromGitError
   given Upcast[RepositoryErr, CypherError] = _ => RepositoryErr.Inconsistent("Invalid cypher")
 
   def fromGitError(ge: GitError): RepositoryErr =
@@ -79,7 +79,7 @@ object RepositoryMutator:
     override def remove(name: SecretName): F[Result[RawStoreLocations]] =
       val path = repoDir.resolve(name)
 
-      val metaPath = path.resolve("meta")
+      val metaPath    = path.resolve("meta")
       val payloadPath = path.resolve("payload")
 
       blocking(exists(payloadPath)).flatMap { rootExists =>
@@ -103,8 +103,8 @@ object RepositoryMutator:
         else
           for
             _ <- blocking(createDirectories(path))
-            _ <- blocking(write(payloadPath, payload.byteArray, CreateOps *))
-            _ <- blocking(writeString(metaPath, meta.rawString, CreateOps *))
+            _ <- blocking(write(payloadPath, payload.byteArray, CreateOps*))
+            _ <- blocking(writeString(metaPath, meta.rawString, CreateOps*))
           yield RawStoreLocations(payloadPath, metaPath).asRight
       }
 
@@ -118,8 +118,8 @@ object RepositoryMutator:
         if !exists then RepositoryErr.Corrupted(name).asLeft.pure[F]
         else
           for
-            _ <- blocking(write(payloadPath, payload.byteArray, UpdateOps *))
-            _ <- blocking(writeString(metaPath, metadata.rawString, UpdateOps *))
+            _ <- blocking(write(payloadPath, payload.byteArray, UpdateOps*))
+            _ <- blocking(writeString(metaPath, metadata.rawString, UpdateOps*))
           yield RawStoreLocations(payloadPath, metaPath).asRight
       }
   }
@@ -265,7 +265,7 @@ object RepositoryReader:
           RepositoryErr.Corrupted(secret.name).asLeft[SecretPackage[RawSecretData]].pure[F]
         else
           for raw <- blocking(Files.readAllBytes(path))
-            yield SecretPackage(secret.name, RawSecretData.from(raw)).asRight
+          yield SecretPackage(secret.name, RawSecretData.from(raw)).asRight
       }
 
 end RepositoryReader
@@ -330,7 +330,7 @@ def mapBranch: Entry => Branch[SecretPackage[RawStoreLocations]] =
           .Solid(
             dir,
             SecretPackage(SecretName.of(dir.toString).toOption.get,
-              RawStoreLocations(payload, meta)
+                          RawStoreLocations(payload, meta)
             )
           ) // todo
       case _ => Branch.Empty(dir)

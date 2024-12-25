@@ -24,7 +24,7 @@ trait CypherService[F[_]]:
 
 object CypherService:
 
-  private class GpgImpl[F[_] : Sync as S](fg: String) extends CypherService[F]:
+  private class GpgImpl[F[_]: Sync as S](fg: String) extends CypherService[F]:
 
     import S.blocking
 
@@ -39,7 +39,7 @@ object CypherService:
 
       val result =
         for rcode <- blocking(encrypt.!(silentLogger))
-          yield Either.cond(rcode == 0, bos.toByteArray, CypherError.InvalidCypher)
+        yield Either.cond(rcode == 0, bos.toByteArray, CypherError.InvalidCypher)
 
       EitherT(result).value
 
@@ -51,7 +51,7 @@ object CypherService:
 
       val result =
         for rcode <- blocking(decrypt.!(silentLogger))
-          yield Either.cond(rcode == 0, bos.toByteArray, CypherError.InvalidCypher)
+        yield Either.cond(rcode == 0, bos.toByteArray, CypherError.InvalidCypher)
 
       EitherT(result).value
 

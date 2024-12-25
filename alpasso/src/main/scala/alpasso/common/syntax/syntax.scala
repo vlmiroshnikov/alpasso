@@ -16,5 +16,5 @@ extension [F[_]: Functor, A, B](fa: F[Either[A, B]])
 extension [A](a: A)
 
   def upcast[B](
-                 using
-                 up: Upcast[B, A]): B = up.upcast(a)
+      using
+      up: Upcast[B, A]): B = up.upcast(a)

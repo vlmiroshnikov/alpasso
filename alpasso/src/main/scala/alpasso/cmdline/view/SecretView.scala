@@ -3,10 +3,10 @@ package alpasso.cmdline.view
 import cats.*
 import cats.syntax.all.*
 
-import alpasso.common.{Converter, RawPackage}
+import alpasso.common.{ Converter, RawPackage }
 import alpasso.core.model.*
 import alpasso.service.fs.model.given
-import alpasso.service.fs.model.{RawMetadata, RawSecretData}
+import alpasso.service.fs.model.{ RawMetadata, RawSecretData }
 
 import Console.*
 

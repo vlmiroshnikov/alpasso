@@ -23,9 +23,7 @@ trait SessionManager[F[_]]:
 
 object SessionManager:
 
-  def make[F[_]: Sync]: SessionManager[F] = new SessionManager[F]:
-    val S = summon[Sync[F]]
-
+  def make[F[_] : Sync as S]: SessionManager[F] = new SessionManager[F]:
     import S.blocking
 
     private def sessionDir = {

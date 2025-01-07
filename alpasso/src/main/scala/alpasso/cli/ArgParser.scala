@@ -1,23 +1,26 @@
 package alpasso.cli
 
 import java.nio.file.Path
-
-import cats.syntax.all.*
-
-import alpasso.cmdline.view.{ OutputFormat, SecretFilter }
-import alpasso.core.model.{ SecretMetadata, SecretName, SecretPayload }
+import alpasso.cmdline.view.{OutputFormat, SecretFilter}
+import alpasso.core.model.{SecretMetadata, SecretName, SecretPayload}
 import alpasso.service.cypher.CypherAlg
-
+import cats.*
+import cats.syntax.all.*
 import com.monovore.decline.*
 
-enum RepoOps:
+enum RemoteOp:
+  case Setup(name: String, url: String)
+  case Sync
+
+enum RepoOp:
   case Init(path: Option[Path], cypher: CypherAlg)
   case List
   case Switch(index: Int)
   case Log
+  case RemoteOps(ops: RemoteOp)
 
 enum Action:
-  case Repo(ops: RepoOps)
+  case Repo(ops: RepoOp)
   case New(name: SecretName, secret: Option[SecretPayload], meta: Option[SecretMetadata])
   case Patch(name: SecretName, payload: Option[SecretPayload], meta: Option[SecretMetadata])
   case Filter(where: SecretFilter, format: OutputFormat)
@@ -31,28 +34,42 @@ object ArgParser:
       val path = Opts.option[Path]("path", "Repository path", "p").orNone
       val gpg  = Opts.option[String]("gpg-fingerprint", "GPG fingerprint").map(CypherAlg.Gpg(_))
 
-      (path, gpg).mapN(RepoOps.Init.apply)
+      (path, gpg).mapN(RepoOp.Init.apply)
     }
 
     val list = Opts.subcommand("list", "List repository") {
-      Opts.apply(RepoOps.List)
+      Opts.apply(RepoOp.List)
     }
 
     val switch = Opts.subcommand("switch", "switch repository") {
       val path = Opts.argument[Int]("index")
-      path.map(RepoOps.Switch.apply)
+      path.map(RepoOp.Switch.apply)
     }
 
     val log = Opts.subcommand("log", "log repository") {
-      Opts.apply(RepoOps.Log)
+      Opts.apply(RepoOp.Log)
     }
 
-    (init orElse list orElse switch orElse log).map(Action.Repo.apply)
+    val remote = Opts.subcommand("remote", "remote ops") {
+      val setup = Opts.subcommand("setup", "add origin remote repository") {
+        val url = Opts.argument[String]("url")
+        val name = Opts.argument[String]("name").withDefault("origin")
+        (name, url).mapN(RemoteOp.Setup.apply)
+      }
+
+      val sync = Opts.subcommand("sync", "sync with remote repository") {
+        Opts.apply(RemoteOp.Sync)
+      }
+
+      (setup orElse sync).map(RepoOp.RemoteOps.apply)
+    }
+
+    List(init, list, switch, log, remote).combineAll.map(Action.Repo.apply)
   }
 
   val add: Opts[Action] = Opts.subcommand("new", "Add new secret") {
-    val name   = Opts.argument("name").mapValidated(SecretName.of)
-    val secret = Opts.argument("secret").map(SecretPayload.fromString).orNone
+    val name = Opts.argument[String]("name").mapValidated(SecretName.of)
+    val secret = Opts.argument[String]("secret").map(SecretPayload.fromString).orNone
     val tags = Opts
       .option[String]("meta", "k1=v1,k2=v2")
       .mapValidated[SecretMetadata](SecretMetadata.fromRaw)
@@ -62,8 +79,8 @@ object ArgParser:
   }
 
   val patch: Opts[Action] = Opts.subcommand("patch", "Update exists secret") {
-    val name   = Opts.argument("name").mapValidated(SecretName.of)
-    val secret = Opts.argument("secret").map(SecretPayload.fromString).orNone
+    val name = Opts.argument[String]("name").mapValidated(SecretName.of)
+    val secret = Opts.argument[String]("secret").map(SecretPayload.fromString).orNone
     val tags = Opts
       .option[String]("meta", "k1=v1,k2=v2")
       .mapValidated[SecretMetadata](SecretMetadata.fromRaw)
@@ -84,7 +101,7 @@ object ArgParser:
   }
 
   val remove: Opts[Action] = Opts.subcommand("rm", "Remove secret") {
-    val name = Opts.argument("name").mapValidated(SecretName.of)
+    val name = Opts.argument[String]("name").mapValidated(SecretName.of)
     name.map(Action.Remove(_))
   }
 

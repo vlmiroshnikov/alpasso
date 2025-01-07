@@ -56,19 +56,24 @@ object CliApp extends IOApp:
 
       case Right(Action.Repo(ops)) =>
         ops match
-          case RepoOps.Init(pathOpt, cypher) =>
+          case RepoOp.Init(pathOpt, cypher) =>
             val path = pathOpt.getOrElse(Path.of(".local")).toAbsolutePath
             (bootstrap[IO](path, SemVer.zero, cypher) <* smgr.setup(Session(path))) >>= handle
 
-          case RepoOps.List => smgr.listAll().map(_.into().asRight[Err]) >>= handle
-          case RepoOps.Log  => provideConfig(historyLog) >>= handle
-          case RepoOps.Switch(sel) =>
+          case RepoOp.List => smgr.listAll().map(_.into().asRight[Err]) >>= handle
+          case RepoOp.Log  => provideConfig(historyLog) >>= handle
+          case RepoOp.Switch(sel) =>
             val switch = OptionT(smgr.listAll().map(_.zipWithIndex.find((_, idx) => idx == sel)))
               .cataF(
                 IO(Err.UseSwitchCommand.asLeft),
                 (s, _) => smgr.setup(s).as(s.into().asRight[Err])
               )
             switch >>= handle
+
+          case RepoOp.RemoteOps(RemoteOp.Setup(name, url)) =>
+            provideConfig(setupRemote(name, url)) >>= handle
+          case RepoOp.RemoteOps(RemoteOp.Sync) =>
+            provideConfig(syncRemote) >>= handle
 
       case Right(Action.New(sn, sp, sm)) =>
         provideCommand(_.create(sn, sp.getOrElse(SecretPayload.empty), sm)) >>= handle

@@ -32,12 +32,9 @@ enum Err:
 
 object Err:
   given Upcast[Err, RepositoryErr] = Err.SecretRepoErr(_)
-
-  given Upcast[Err, RepoMetaErr] = _ => Err.InternalErr
-
-  given Upcast[Err, ProvisionErr] = e => Err.RepositoryProvisionErr(e)
-
-  given Upcast[Err, CypherError] = e => Err.SecretRepoErr(e.upcast)
+  given Upcast[Err, RepoMetaErr]   = _ => Err.InternalErr
+  given Upcast[Err, ProvisionErr]  = e => Err.RepositoryProvisionErr(e)
+  given Upcast[Err, CypherError]   = e => Err.SecretRepoErr(e.upcast)
 end Err
 
 def bootstrap[F[_]: Sync: Logger](repoDir: Path, version: SemVer, cypher: CypherAlg): F[Result[StorageView]] =
@@ -52,6 +49,29 @@ def historyLog[F[_]: Sync](configuration: RepositoryConfiguration): F[Result[His
       ge => summon[Upcast[Err, RepositoryErr]].upcast(fromGitError(ge)) // todo fix it
 
     git.history().nested.map(v => HistoryLogView.from(v.commits)).value.liftE[Err].value
+  }
+
+def setupRemote[F[_]: Sync](name: String, url: String)(configuration: RepositoryConfiguration): F[Result[Unit]] =
+  GitRepo.openExists(configuration.repoDir).use { git =>
+    import RepositoryErr.*
+    given Upcast[Err, GitError] =
+      ge => summon[Upcast[Err, RepositoryErr]].upcast(fromGitError(ge)) // todo fix it
+
+    git.addRemote(name, url).liftE[Err].value
+  }
+
+def syncRemote[F[_]: Sync](configuration: RepositoryConfiguration): F[Result[Unit]] =
+  GitRepo.openExists(configuration.repoDir).use { git =>
+    import RepositoryErr.*
+    given Upcast[Err, GitError] =
+      ge => summon[Upcast[Err, RepositoryErr]].upcast(fromGitError(ge)) // todo fix it
+
+    val result = for
+      _ <- git.pullRemote().liftE[Err]
+      _ <- git.pushToRemote().liftE[Err]
+    yield ()
+
+    result.value
   }
 
 trait Command[F[_]]:

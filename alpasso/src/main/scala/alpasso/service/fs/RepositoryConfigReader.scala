@@ -105,7 +105,8 @@ object RepositoryProvisioner:
       }
 
 enum RepoMetaErr:
-  case NotInitialized, InvalidFormat
+  case NotInitialized(path: Path)
+  case InvalidFormat(path: Path)
 
 object RepositoryConfigReader:
 
@@ -115,10 +116,10 @@ object RepositoryConfigReader:
     val fullPath = repoDir.resolve(RepositoryProvisioner.repoMetadataFile)
 
     blocking(Files.exists(fullPath)).flatMap { exists =>
-      if !exists then RepoMetaErr.NotInitialized.asLeft.pure[F]
+      if !exists then RepoMetaErr.NotInitialized(fullPath).asLeft.pure[F]
       else
         for
           raw <- blocking(Files.readString(fullPath))
           ctx <- blocking(parser.parse(raw).flatMap(_.as[RepositoryMetaConfig]))
-        yield ctx.leftMap(_ => RepoMetaErr.InvalidFormat)
+        yield ctx.leftMap(_ => RepoMetaErr.InvalidFormat(fullPath))
     }

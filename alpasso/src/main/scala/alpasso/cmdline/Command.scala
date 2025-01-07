@@ -13,6 +13,7 @@ import alpasso.common.{ Logger, RawPackage, Result, SemVer }
 import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
+import alpasso.service.fs.RepoMetaErr.{ InvalidFormat, NotInitialized }
 import alpasso.service.fs.model.{ Branch, * }
 import alpasso.service.git.{ GitError, GitRepo }
 
@@ -28,13 +29,17 @@ enum Err:
   case InternalErr
   case CommandSyntaxError(help: String)
   case UseSwitchCommand
+  case VersionMismatch(version: SemVer)
   case RepositoryProvisionErr(err: ProvisionErr)
 
 object Err:
   given Upcast[Err, RepositoryErr] = Err.SecretRepoErr(_)
-  given Upcast[Err, RepoMetaErr]   = _ => Err.InternalErr
-  given Upcast[Err, ProvisionErr]  = e => Err.RepositoryProvisionErr(e)
-  given Upcast[Err, CypherError]   = e => Err.SecretRepoErr(e.upcast)
+
+  given Upcast[Err, RepoMetaErr] =
+    case NotInitialized(path) => Err.StorageNotInitialized(path)
+    case InvalidFormat(path)  => Err.StorageCorrupted(path)
+  given Upcast[Err, ProvisionErr] = e => Err.RepositoryProvisionErr(e)
+  given Upcast[Err, CypherError]  = e => Err.SecretRepoErr(e.upcast)
 end Err
 
 def bootstrap[F[_]: Sync: Logger](repoDir: Path, version: SemVer, cypher: CypherAlg): F[Result[StorageView]] =

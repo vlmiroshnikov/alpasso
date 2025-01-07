@@ -44,6 +44,7 @@ object CliApp extends IOApp:
       (for
         session <- EitherT.fromOptionF(smgr.current(), Err.UseSwitchCommand)
         cfg     <- rmr.read(session.path).liftE[Err]
+        _       <- EitherT.cond(cfg.version == SemVer.current, (), Err.VersionMismatch(cfg.version))
         result  <- f(RepositoryConfiguration(session.path, cfg.version, cfg.cryptoAlg)).liftE[Err]
       yield result).value
 
@@ -58,7 +59,7 @@ object CliApp extends IOApp:
         ops match
           case RepoOp.Init(pathOpt, cypher) =>
             val path = pathOpt.getOrElse(Path.of(".local")).toAbsolutePath
-            (bootstrap[IO](path, SemVer.zero, cypher) <* smgr.setup(Session(path))) >>= handle
+            (bootstrap[IO](path, SemVer.current, cypher) <* smgr.setup(Session(path))) >>= handle
 
           case RepoOp.List => smgr.listAll().map(_.into().asRight[Err]) >>= handle
           case RepoOp.Log  => provideConfig(historyLog) >>= handle

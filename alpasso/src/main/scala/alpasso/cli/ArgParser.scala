@@ -1,11 +1,14 @@
 package alpasso.cli
 
 import java.nio.file.Path
-import alpasso.cmdline.view.{OutputFormat, SecretFilter}
-import alpasso.core.model.{SecretMetadata, SecretName, SecretPayload}
-import alpasso.service.cypher.CypherAlg
+
 import cats.*
 import cats.syntax.all.*
+
+import alpasso.cmdline.view.{ OutputFormat, SecretFilter }
+import alpasso.core.model.{ SecretMetadata, SecretName, SecretPayload }
+import alpasso.service.cypher.CypherAlg
+
 import com.monovore.decline.*
 
 enum RemoteOp:
@@ -52,7 +55,7 @@ object ArgParser:
 
     val remote = Opts.subcommand("remote", "remote ops") {
       val setup = Opts.subcommand("setup", "add origin remote repository") {
-        val url = Opts.argument[String]("url")
+        val url  = Opts.argument[String]("url")
         val name = Opts.argument[String]("name").withDefault("origin")
         (name, url).mapN(RemoteOp.Setup.apply)
       }
@@ -68,7 +71,7 @@ object ArgParser:
   }
 
   val add: Opts[Action] = Opts.subcommand("new", "Add new secret") {
-    val name = Opts.argument[String]("name").mapValidated(SecretName.of)
+    val name   = Opts.argument[String]("name").mapValidated(SecretName.of)
     val secret = Opts.argument[String]("secret").map(SecretPayload.fromString).orNone
     val tags = Opts
       .option[String]("meta", "k1=v1,k2=v2")
@@ -79,7 +82,7 @@ object ArgParser:
   }
 
   val patch: Opts[Action] = Opts.subcommand("patch", "Update exists secret") {
-    val name = Opts.argument[String]("name").mapValidated(SecretName.of)
+    val name   = Opts.argument[String]("name").mapValidated(SecretName.of)
     val secret = Opts.argument[String]("secret").map(SecretPayload.fromString).orNone
     val tags = Opts
       .option[String]("meta", "k1=v1,k2=v2")

@@ -61,7 +61,7 @@ object CliApp extends IOApp:
             (bootstrap[IO](path, SemVer.zero, cypher) <* smgr.setup(Session(path))) >>= handle
 
           case RepoOp.List => smgr.listAll().map(_.into().asRight[Err]) >>= handle
-          case RepoOp.Log => provideConfig(historyLog) >>= handle
+          case RepoOp.Log  => provideConfig(historyLog) >>= handle
           case RepoOp.Switch(sel) =>
             val switch = OptionT(smgr.listAll().map(_.zipWithIndex.find((_, idx) => idx == sel)))
               .cataF(

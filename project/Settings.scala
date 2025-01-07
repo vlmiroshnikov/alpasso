@@ -34,7 +34,7 @@ object Deps {
   lazy val circe =
     Seq("io.circe" %% "circe-core", "io.circe" %% "circe-parser").map(_ % Versions.circe)
   lazy val evo_circe = Seq("com.evolution" % "derivation-circe_3" % "0.2.0")
-  lazy val decline   = Seq("com.monovore" %% "decline" % "2.4.1")
+  lazy val decline   = Seq("com.monovore" %% "decline" % "2.5.0")
   lazy val tofu      = Seq("tf.tofu" %% "tofu-core-higher-kind" % "0.13.6")
 
   lazy val logstage = Seq(

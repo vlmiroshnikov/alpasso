@@ -1,18 +1,21 @@
 package alpasso.cmdline
 
 import java.nio.file.Path
+
 import cats.*
 import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
-import alpasso.cmdline.view.{*, given}
+
+import alpasso.cmdline.view.{ *, given }
 import alpasso.common.syntax.*
-import alpasso.common.{Logger, RawPackage, Result, SemVer}
+import alpasso.common.{ Logger, RawPackage, Result, SemVer }
 import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
-import alpasso.service.fs.model.{Branch, *}
-import alpasso.service.git.{GitError, GitRepo}
+import alpasso.service.fs.model.{ Branch, * }
+import alpasso.service.git.{ GitError, GitRepo }
+
 import glass.*
 
 enum Err:
@@ -29,9 +32,9 @@ enum Err:
 
 object Err:
   given Upcast[Err, RepositoryErr] = Err.SecretRepoErr(_)
-  given Upcast[Err, RepoMetaErr] = _ => Err.InternalErr
-  given Upcast[Err, ProvisionErr] = e => Err.RepositoryProvisionErr(e)
-  given Upcast[Err, CypherError] = e => Err.SecretRepoErr(e.upcast)
+  given Upcast[Err, RepoMetaErr]   = _ => Err.InternalErr
+  given Upcast[Err, ProvisionErr]  = e => Err.RepositoryProvisionErr(e)
+  given Upcast[Err, CypherError]   = e => Err.SecretRepoErr(e.upcast)
 end Err
 
 def bootstrap[F[_]: Sync: Logger](repoDir: Path, version: SemVer, cypher: CypherAlg): F[Result[StorageView]] =
@@ -48,7 +51,7 @@ def historyLog[F[_]: Sync](configuration: RepositoryConfiguration): F[Result[His
     git.history().nested.map(v => HistoryLogView.from(v.commits)).value.liftE[Err].value
   }
 
-def setupRemote[F[_] : Sync](name: String, url: String)(configuration: RepositoryConfiguration): F[Result[Unit]] =
+def setupRemote[F[_]: Sync](name: String, url: String)(configuration: RepositoryConfiguration): F[Result[Unit]] =
   GitRepo.openExists(configuration.repoDir).use { git =>
     import RepositoryErr.*
     given Upcast[Err, GitError] =
@@ -57,7 +60,7 @@ def setupRemote[F[_] : Sync](name: String, url: String)(configuration: Repositor
     git.addRemote(name, url).liftE[Err].value
   }
 
-def syncRemote[F[_] : Sync](configuration: RepositoryConfiguration): F[Result[Unit]] =
+def syncRemote[F[_]: Sync](configuration: RepositoryConfiguration): F[Result[Unit]] =
   GitRepo.openExists(configuration.repoDir).use { git =>
     import RepositoryErr.*
     given Upcast[Err, GitError] =
@@ -70,7 +73,6 @@ def syncRemote[F[_] : Sync](configuration: RepositoryConfiguration): F[Result[Un
 
     result.value
   }
-
 
 trait Command[F[_]]:
 

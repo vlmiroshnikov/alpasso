@@ -1,7 +1,7 @@
 package alpasso.cli
 
+import java.nio.file.*
 import java.nio.file.StandardOpenOption.{ CREATE, TRUNCATE_EXISTING, WRITE }
-import java.nio.file.{ FileSystems, Files, Path, Paths }
 
 import cats.*
 import cats.data.*
@@ -23,7 +23,7 @@ trait SessionManager[F[_]]:
 
 object SessionManager:
 
-  def make[F[_] : Sync as S]: SessionManager[F] = new SessionManager[F]:
+  def make[F[_]: Sync as S]: SessionManager[F] = new SessionManager[F]:
     import S.blocking
 
     private def sessionDir = {

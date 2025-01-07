@@ -53,7 +53,7 @@ object RepositoryErr:
       case GitError.RepositoryIsDirty =>
         RepositoryErr.Inconsistent("Git repository has uncommited files")
       case GitError.UnexpectedError => RepositoryErr.Undefiled
-      case GitError.SyncErr => RepositoryErr.Undefiled
+      case GitError.SyncErr         => RepositoryErr.Undefiled
 
 type Result[+T] = Either[RepositoryErr, T]
 

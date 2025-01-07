@@ -2,19 +2,22 @@ package alpasso.service.git
 
 import java.nio.file.*
 import java.time.Instant
+
 import scala.jdk.CollectionConverters.*
 import scala.util.*
 import scala.util.control.NoStackTrace
+
 import cats.*
 import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
+
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.errors.RepositoryNotFoundException
-import org.eclipse.jgit.lib.{Ref, Repository}
+import org.eclipse.jgit.lib.{ Ref, Repository }
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
-import org.eclipse.jgit.transport.{RemoteRefUpdate, URIish}
+import org.eclipse.jgit.transport.{ RemoteRefUpdate, URIish }
 
 enum GitError extends Throwable with NoStackTrace:
   case RepositoryNotFound(path: Path)
@@ -77,13 +80,16 @@ object GitRepo:
       Either.cond(status.isClean, (), GitError.RepositoryIsDirty)
 
   class Impl[F[_]: Sync as F](repository: Repository) extends GitRepo[F]:
-    import F.blocking
     import scala.sys.process.*
+
+    import F.blocking
 
     given Order[Path] = Order.fromComparable[Path]
 
     private def silentLogger(name: String) =
-      ProcessLogger(fout => println(s"${name} FOUT: ${fout}"), ferr => println(s"${name} FERRL ${ferr}"))
+      ProcessLogger(fout => println(s"${name} FOUT: ${fout}"),
+                    ferr => println(s"${name} FERRL ${ferr}")
+      )
 
     override def verify: F[Either[GitError, Unit]] =
       verify_(repository)
@@ -91,7 +97,8 @@ object GitRepo:
     override def addRemote(name: String, url: String): F[Result[Unit]] =
       blocking:
         val git = new Git(repository)
-        val remoteAdd = git.remoteAdd()
+        val remoteAdd = git
+          .remoteAdd()
           .setName(name)
           .setUri(new URIish(url))
         val _ = remoteAdd.call()
@@ -101,20 +108,18 @@ object GitRepo:
       val pull = Process(Seq("git", "pull", "origin", "master"), repository.getWorkTree)
       val result =
         for rcode <- blocking(pull.!(silentLogger("pull")))
-          yield Either.cond(rcode == 0, (), GitError.SyncErr)
+        yield Either.cond(rcode == 0, (), GitError.SyncErr)
 
       EitherT(result).value
-
 
     override def pushToRemote(): F[Result[Unit]] =
       val push = Process(Seq("git", "push", "origin", "master"), repository.getWorkTree)
 
       val result =
         for rcode <- blocking(push.!(silentLogger("push")))
-          yield Either.cond(rcode == 0, (), GitError.SyncErr)
+        yield Either.cond(rcode == 0, (), GitError.SyncErr)
 
       EitherT(result).value
-
 
     override def history(): F[Result[HistoryLog]] =
       blocking:

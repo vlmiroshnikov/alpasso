@@ -16,7 +16,7 @@ enum RemoteOp:
   case Sync
 
 enum RepoOp:
-  case Init(path: Option[Path], cypher: CypherAlg)
+  case Init(path: Path, cypher: CypherAlg)
   case List
   case Switch(index: Int)
   case Log
@@ -34,7 +34,7 @@ object ArgParser:
   val repos: Opts[Action] = Opts.subcommand("repo", "Repositories ops") {
 
     val init = Opts.subcommand("init", "Init new repository") {
-      val path = Opts.option[Path]("path", "Repository path", "p").orNone
+      val path = Opts.option[Path]("path", "Repository path", "p")
       val gpg  = Opts.option[String]("gpg-fingerprint", "GPG fingerprint").map(CypherAlg.Gpg(_))
 
       (path, gpg).mapN(RepoOp.Init.apply)

@@ -13,7 +13,6 @@ import alpasso.service.fs.{ ProvisionErr, RepositoryErr }
 case class ErrorView(error: String, suggest: Option[String] = None)
 
 object ErrorView:
-
   given Show[ErrorView] = Show.show(s => s"${s.error} ${s.suggest.getOrElse("")}")
 
 given Converter[Err, ErrorView] =

@@ -14,6 +14,7 @@ import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
 import alpasso.service.fs.RepoMetaErr.{ InvalidFormat, NotInitialized }
+import alpasso.service.fs.RepositoryErr.fromGitError
 import alpasso.service.fs.model.{ Branch, * }
 import alpasso.service.git.{ GitError, GitRepo }
 
@@ -40,6 +41,9 @@ object Err:
     case InvalidFormat(path)  => Err.StorageCorrupted(path)
   given Upcast[Err, ProvisionErr] = e => Err.RepositoryProvisionErr(e)
   given Upcast[Err, CypherError]  = e => Err.SecretRepoErr(e.upcast)
+
+  given Upcast[Err, GitError] =
+    ge => summon[Upcast[Err, RepositoryErr]].upcast(fromGitError(ge)) // todo fix it
 end Err
 
 def bootstrap[F[_] : {Sync, Logger}](
@@ -52,10 +56,6 @@ def bootstrap[F[_] : {Sync, Logger}](
 
 def historyLog[F[_]: Sync](configuration: RepositoryConfiguration): F[Result[HistoryLogView]] =
   GitRepo.openExists(configuration.repoDir).use { git =>
-    import RepositoryErr.*
-    given Upcast[Err, GitError] =
-      ge => summon[Upcast[Err, RepositoryErr]].upcast(fromGitError(ge)) // todo fix it
-
     git.history().nested.map(v => HistoryLogView.from(v.commits)).value.liftE[Err].value
   }
 
@@ -63,20 +63,10 @@ def setupRemote[F[_] : Sync](
                               name: String,
                               url: String
                             )(configuration: RepositoryConfiguration): F[Result[Unit]] =
-  GitRepo.openExists(configuration.repoDir).use { git =>
-    import RepositoryErr.*
-    given Upcast[Err, GitError] =
-      ge => summon[Upcast[Err, RepositoryErr]].upcast(fromGitError(ge)) // todo fix it
-
-    git.addRemote(name, url).liftE[Err].value
-  }
+  GitRepo.openExists(configuration.repoDir).use { git => git.addRemote(name, url).liftE[Err].value }
 
 def syncRemote[F[_]: Sync](configuration: RepositoryConfiguration): F[Result[Unit]] =
   GitRepo.openExists(configuration.repoDir).use { git =>
-    import RepositoryErr.*
-    given Upcast[Err, GitError] =
-      ge => summon[Upcast[Err, RepositoryErr]].upcast(fromGitError(ge)) // todo fix it
-
     val result = for
       _ <- git.pullRemote().liftE[Err]
       _ <- git.pushToRemote().liftE[Err]

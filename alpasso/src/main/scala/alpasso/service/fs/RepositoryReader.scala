@@ -29,7 +29,7 @@ import alpasso.service.fs.model.*
 import alpasso.service.git.{ GitError, GitRepo }
 
 import glass.Upcast
-import io.circe.{ Decoder, Encoder, Json }
+import io.circe.*
 import logstage.LogIO
 import tofu.higherKind.*
 import tofu.higherKind.Mid.*
@@ -60,23 +60,23 @@ type Result[+T] = Either[RepositoryErr, T]
 trait RepositoryMutator[F[_]] derives ApplyK:
 
   def create(
-              name: SecretName,
-              payload: RawSecretData,
-              meta: RawMetadata): F[Result[RawStoreLocations]]
+      name: SecretName,
+      payload: RawSecretData,
+      meta: RawMetadata): F[Result[RawStoreLocations]]
 
   def update(
-              name: SecretName,
-              payload: RawSecretData,
-              meta: RawMetadata): F[Result[RawStoreLocations]]
+      name: SecretName,
+      payload: RawSecretData,
+      meta: RawMetadata): F[Result[RawStoreLocations]]
   def remove(name: SecretName): F[Result[RawStoreLocations]]
 
 object RepositoryMutator:
 
-  def make[F[_]: Async: Logger](config: RepositoryConfiguration): RepositoryMutator[F] =
+  def make[F[_]: { Async, Logger }](config: RepositoryConfiguration): RepositoryMutator[F] =
     val gitted: RepositoryMutator[Mid[F, *]] = Gitted[F](config.repoDir)
     gitted attach Impl[F](config.repoDir)
 
-  class Impl[F[_]: Logger: Sync as F](repoDir: Path) extends RepositoryMutator[F] {
+  class Impl[F[_]: { Logger, Sync as F }](repoDir: Path) extends RepositoryMutator[F] {
 
     import F.blocking
     import Files.*
@@ -102,9 +102,9 @@ object RepositoryMutator:
       }
 
     override def create(
-                         name: SecretName,
-                         payload: RawSecretData,
-                         meta: RawMetadata): F[Result[RawStoreLocations]] =
+        name: SecretName,
+        payload: RawSecretData,
+        meta: RawMetadata): F[Result[RawStoreLocations]] =
       val path = repoDir.resolve(name)
 
       val metaPath    = path.resolve("meta")
@@ -121,9 +121,9 @@ object RepositoryMutator:
       }
 
     override def update(
-                         name: SecretName,
-                         payload: RawSecretData,
-                         metadata: RawMetadata): F[Result[RawStoreLocations]] =
+        name: SecretName,
+        payload: RawSecretData,
+        metadata: RawMetadata): F[Result[RawStoreLocations]] =
       val path = repoDir.resolve(name)
 
       val metaPath    = path.resolve("meta")
@@ -142,9 +142,9 @@ object RepositoryMutator:
   class Gitted[F[_]: Sync](repoDir: Path) extends RepositoryMutator[Mid[F, *]] {
 
     override def create(
-                         name: SecretName,
-                         payload: RawSecretData,
-                         meta: RawMetadata): Mid[F, Result[RawStoreLocations]] =
+        name: SecretName,
+        payload: RawSecretData,
+        meta: RawMetadata): Mid[F, Result[RawStoreLocations]] =
       action => {
         GitRepo.openExists(repoDir).use { git =>
           val commitMsg = s"Add secret [$name]"
@@ -157,9 +157,9 @@ object RepositoryMutator:
       }
 
     override def update(
-                         name: SecretName,
-                         payload: RawSecretData,
-                         meta: RawMetadata): Mid[F, Result[RawStoreLocations]] =
+        name: SecretName,
+        payload: RawSecretData,
+        meta: RawMetadata): Mid[F, Result[RawStoreLocations]] =
       action => {
         GitRepo.openExists(repoDir).use { git =>
           val commitMsg = s"Update secret [$name]"
@@ -189,25 +189,25 @@ trait RepositoryReader[F[_]] derives ApplyK:
   def loadMeta(secret: SecretPackage[Path]): F[Result[SecretPackage[RawMetadata]]]
 
   def loadFully(
-                 secret: SecretPackage[
-                   RawStoreLocations
-                 ]): F[Result[SecretPackage[(RawSecretData, RawMetadata)]]]
+      secret: SecretPackage[
+        RawStoreLocations
+      ]): F[Result[SecretPackage[(RawSecretData, RawMetadata)]]]
   def walkTree: F[Result[Node[Branch[SecretPackage[RawStoreLocations]]]]]
 
 object RepositoryReader:
 
-  def make[F[_] : {Async, Logger}](
+  def make[F[_]: { Async, Logger }](
       config: RepositoryConfiguration,
       cs: CypherService[F]): RepositoryReader[F] =
     val gitted: RepositoryReader[Mid[F, *]] = Gitted[F](config.repoDir)
     val lcs: RepositoryReader[Mid[F, *]]    = CypheredStorage[F](cs)
     (gitted |+| lcs) attach Impl[F](config.repoDir)
 
-  class CypheredStorage[F[_] : {Async, Logger}](cs: CypherService[F])
+  class CypheredStorage[F[_]: { Async, Logger }](cs: CypherService[F])
       extends RepositoryReader[Mid[F, *]] {
 
     override def loadPayload(
-                              secret: SecretPackage[Path]): Mid[F, Result[SecretPackage[RawSecretData]]] =
+        secret: SecretPackage[Path]): Mid[F, Result[SecretPackage[RawSecretData]]] =
       action =>
         (for
           d <- EitherT(action)
@@ -218,9 +218,9 @@ object RepositoryReader:
       identity
 
     override def loadFully(
-                            secret: SecretPackage[
-                              RawStoreLocations
-                            ]): Mid[F, Result[SecretPackage[(RawSecretData, RawMetadata)]]] =
+        secret: SecretPackage[
+          RawStoreLocations
+        ]): Mid[F, Result[SecretPackage[(RawSecretData, RawMetadata)]]] =
       action =>
         (for
           d <- EitherT(action)
@@ -237,16 +237,16 @@ object RepositoryReader:
       GitRepo.openExists(repoDir).use(_.verify).liftE[RepositoryErr]
 
     override def loadPayload(
-                              secret: SecretPackage[Path]): Mid[F, Result[SecretPackage[RawSecretData]]] =
+        secret: SecretPackage[Path]): Mid[F, Result[SecretPackage[RawSecretData]]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
     override def loadMeta(secret: SecretPackage[Path]): Mid[F, Result[SecretPackage[RawMetadata]]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
     override def loadFully(
-                            secret: SecretPackage[
-                              RawStoreLocations
-                            ]): Mid[F, Result[SecretPackage[(RawSecretData, RawMetadata)]]] =
+        secret: SecretPackage[
+          RawStoreLocations
+        ]): Mid[F, Result[SecretPackage[(RawSecretData, RawMetadata)]]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
     override def walkTree: Mid[F, Result[Node[Branch[SecretPackage[RawStoreLocations]]]]] =
@@ -285,9 +285,9 @@ object RepositoryReader:
       }
 
     override def loadFully(
-                            secret: SecretPackage[
-                              RawStoreLocations
-                            ]): F[Result[SecretPackage[(RawSecretData, RawMetadata)]]] =
+        secret: SecretPackage[
+          RawStoreLocations
+        ]): F[Result[SecretPackage[(RawSecretData, RawMetadata)]]] =
       for
         p <- loadPayload(secret.map(_.secretData))
         m <- loadMeta(secret.map(_.metadata))

@@ -42,7 +42,10 @@ object Err:
   given Upcast[Err, CypherError]  = e => Err.SecretRepoErr(e.upcast)
 end Err
 
-def bootstrap[F[_]: Sync: Logger](repoDir: Path, version: SemVer, cypher: CypherAlg): F[Result[StorageView]] =
+def bootstrap[F[_] : {Sync, Logger}](
+                                      repoDir: Path,
+                                      version: SemVer,
+                                      cypher: CypherAlg): F[Result[StorageView]] =
   val provisioner = RepositoryProvisioner.make(repoDir)
   val config      = RepositoryMetaConfig(version, cypher)
   provisioner.provision(config).liftE[Err].map(_ => StorageView(repoDir, cypher)).value
@@ -56,7 +59,10 @@ def historyLog[F[_]: Sync](configuration: RepositoryConfiguration): F[Result[His
     git.history().nested.map(v => HistoryLogView.from(v.commits)).value.liftE[Err].value
   }
 
-def setupRemote[F[_]: Sync](name: String, url: String)(configuration: RepositoryConfiguration): F[Result[Unit]] =
+def setupRemote[F[_] : Sync](
+                              name: String,
+                              url: String
+                            )(configuration: RepositoryConfiguration): F[Result[Unit]] =
   GitRepo.openExists(configuration.repoDir).use { git =>
     import RepositoryErr.*
     given Upcast[Err, GitError] =
@@ -96,7 +102,7 @@ trait Command[F[_]]:
 
 object Command:
 
-  def make[F[_]: Async: Logger](config: RepositoryConfiguration): Command[F] =
+  def make[F[_] : {Async, Logger}](config: RepositoryConfiguration): Command[F] =
     val cs = config.cypherAlg match
       case CypherAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
 
@@ -104,7 +110,7 @@ object Command:
     val mutator = RepositoryMutator.make(config)
     Impl[F](cs, reader, mutator)
 
-  private class Impl[F[_]: Async: Logger](
+  private class Impl[F[_] : {Async, Logger}](
       cs: CypherService[F],
       reader: RepositoryReader[F],
       mutator: RepositoryMutator[F])

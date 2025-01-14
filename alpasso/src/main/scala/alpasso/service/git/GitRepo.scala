@@ -14,10 +14,10 @@ import cats.syntax.all.*
 
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.errors.RepositoryNotFoundException
-import org.eclipse.jgit.lib.{ Ref, Repository }
+import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
-import org.eclipse.jgit.transport.{ RemoteRefUpdate, URIish }
+import org.eclipse.jgit.transport.URIish
 
 enum GitError extends Throwable with NoStackTrace:
   case RepositoryNotFound(path: Path)

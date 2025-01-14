@@ -14,10 +14,10 @@ import cats.syntax.all.*
 
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.errors.RepositoryNotFoundException
-import org.eclipse.jgit.lib.{ Ref, Repository }
+import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
-import org.eclipse.jgit.transport.{ RemoteRefUpdate, URIish }
+import org.eclipse.jgit.transport.URIish
 
 enum GitError extends Throwable with NoStackTrace:
   case RepositoryNotFound(path: Path)
@@ -35,11 +35,8 @@ trait GitRepo[F[_]]:
   def commitFiles(files: NonEmptyList[Path], message: String): F[Result[RevCommit]]
   def removeFiles(files: NonEmptyList[Path], message: String): F[Result[RevCommit]]
   def history(): F[Result[HistoryLog]]
-
   def addRemote(name: String, url: String): F[Result[Unit]]
-
   def pullRemote(): F[Result[Unit]]
-
   def pushToRemote(): F[Result[Unit]]
 
 object GitRepo:
@@ -131,7 +128,9 @@ object GitRepo:
           )
         ).asRight
 
-    override def commitFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]] =
+    override def commitFiles(
+                              files: NonEmptyList[Path],
+                              message: String): F[Either[GitError, RevCommit]] =
       blocking:
         val git        = new Git(repository)
         val addCommand = git.add()
@@ -146,7 +145,9 @@ object GitRepo:
           .call()
           .asRight
 
-    override def removeFiles(files: NonEmptyList[Path], message: String): F[Either[GitError, RevCommit]] =
+    override def removeFiles(
+                              files: NonEmptyList[Path],
+                              message: String): F[Either[GitError, RevCommit]] =
       blocking:
         val git   = new Git(repository)
         val rmCmd = git.rm()

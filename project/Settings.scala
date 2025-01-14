@@ -28,7 +28,6 @@ object Deps {
   lazy val tagless    = Seq("org.typelevel" %% "cats-tagless-core" % "0.16.2")
 
   lazy val jgit  = Seq("org.eclipse.jgit" % "org.eclipse.jgit" % "6.5.0.202303070854-r")
-  lazy val fs2   = Seq("co.fs2" %% "fs2-core", "co.fs2" %% "fs2-io").map(_ % "3.10.0")
   lazy val glass = Seq("tf.tofu" %% "glass-core" % "0.3.0")
 
   lazy val circe =

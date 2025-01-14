@@ -13,6 +13,8 @@ import alpasso.common.{ Logger, RawPackage, Result, SemVer }
 import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
+import alpasso.service.fs.RepoMetaErr.{ InvalidFormat, NotInitialized }
+import alpasso.service.fs.RepositoryErr.fromGitError
 import alpasso.service.fs.model.{ Branch, * }
 import alpasso.service.git.{ GitError, GitRepo }
 
@@ -28,44 +30,43 @@ enum Err:
   case InternalErr
   case CommandSyntaxError(help: String)
   case UseSwitchCommand
+  case VersionMismatch(version: SemVer)
   case RepositoryProvisionErr(err: ProvisionErr)
 
 object Err:
   given Upcast[Err, RepositoryErr] = Err.SecretRepoErr(_)
-  given Upcast[Err, RepoMetaErr]   = _ => Err.InternalErr
-  given Upcast[Err, ProvisionErr]  = e => Err.RepositoryProvisionErr(e)
-  given Upcast[Err, CypherError]   = e => Err.SecretRepoErr(e.upcast)
+
+  given Upcast[Err, RepoMetaErr] =
+    case NotInitialized(path) => Err.StorageNotInitialized(path)
+    case InvalidFormat(path)  => Err.StorageCorrupted(path)
+  given Upcast[Err, ProvisionErr] = e => Err.RepositoryProvisionErr(e)
+  given Upcast[Err, CypherError]  = e => Err.SecretRepoErr(e.upcast)
+
+  given Upcast[Err, GitError] =
+    ge => summon[Upcast[Err, RepositoryErr]].upcast(fromGitError(ge)) // todo fix it
 end Err
 
-def bootstrap[F[_]: Sync: Logger](repoDir: Path, version: SemVer, cypher: CypherAlg): F[Result[StorageView]] =
+def bootstrap[F[_] : {Sync, Logger}](
+                                      repoDir: Path,
+                                      version: SemVer,
+                                      cypher: CypherAlg): F[Result[StorageView]] =
   val provisioner = RepositoryProvisioner.make(repoDir)
   val config      = RepositoryMetaConfig(version, cypher)
   provisioner.provision(config).liftE[Err].map(_ => StorageView(repoDir, cypher)).value
 
 def historyLog[F[_]: Sync](configuration: RepositoryConfiguration): F[Result[HistoryLogView]] =
   GitRepo.openExists(configuration.repoDir).use { git =>
-    import RepositoryErr.*
-    given Upcast[Err, GitError] =
-      ge => summon[Upcast[Err, RepositoryErr]].upcast(fromGitError(ge)) // todo fix it
-
     git.history().nested.map(v => HistoryLogView.from(v.commits)).value.liftE[Err].value
   }
 
-def setupRemote[F[_]: Sync](name: String, url: String)(configuration: RepositoryConfiguration): F[Result[Unit]] =
-  GitRepo.openExists(configuration.repoDir).use { git =>
-    import RepositoryErr.*
-    given Upcast[Err, GitError] =
-      ge => summon[Upcast[Err, RepositoryErr]].upcast(fromGitError(ge)) // todo fix it
-
-    git.addRemote(name, url).liftE[Err].value
-  }
+def setupRemote[F[_] : Sync](
+                              name: String,
+                              url: String
+                            )(configuration: RepositoryConfiguration): F[Result[Unit]] =
+  GitRepo.openExists(configuration.repoDir).use { git => git.addRemote(name, url).liftE[Err].value }
 
 def syncRemote[F[_]: Sync](configuration: RepositoryConfiguration): F[Result[Unit]] =
   GitRepo.openExists(configuration.repoDir).use { git =>
-    import RepositoryErr.*
-    given Upcast[Err, GitError] =
-      ge => summon[Upcast[Err, RepositoryErr]].upcast(fromGitError(ge)) // todo fix it
-
     val result = for
       _ <- git.pullRemote().liftE[Err]
       _ <- git.pushToRemote().liftE[Err]
@@ -91,7 +92,7 @@ trait Command[F[_]]:
 
 object Command:
 
-  def make[F[_]: Async: Logger](config: RepositoryConfiguration): Command[F] =
+  def make[F[_] : {Async, Logger}](config: RepositoryConfiguration): Command[F] =
     val cs = config.cypherAlg match
       case CypherAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
 
@@ -99,7 +100,7 @@ object Command:
     val mutator = RepositoryMutator.make(config)
     Impl[F](cs, reader, mutator)
 
-  private class Impl[F[_]: Async: Logger](
+  private class Impl[F[_] : {Async, Logger}](
       cs: CypherService[F],
       reader: RepositoryReader[F],
       mutator: RepositoryMutator[F])

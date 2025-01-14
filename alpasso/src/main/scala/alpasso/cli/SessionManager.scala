@@ -17,19 +17,24 @@ import io.circe.syntax.given
 case class Session(path: Path)
 
 trait SessionManager[F[_]]:
-  def current(): F[Option[Session]]
-  def listAll(): F[List[Session]]
+  def current: F[Option[Session]]
+
+  def listAll: F[List[Session]]
   def setup(session: Session): F[Unit]
 
 object SessionManager:
 
-  def make[F[_]: Sync as S]: SessionManager[F] = new SessionManager[F]:
+  def make[F[_] : Sync]: SessionManager[F] =
+    Impl[F]
+
+  class Impl[F[_] : Sync as S] extends SessionManager[F]:
     import S.blocking
 
     private def sessionDir = {
       val str = System.getProperty("user.home")
       Path.of(str).toAbsolutePath.resolve(".alpasso")
     }
+
     private val sessionFile = sessionDir.resolve("sessions")
 
     val empty = SessionData(current = None, sessions = Nil)
@@ -54,7 +59,7 @@ object SessionManager:
     def modify(f: SessionData => SessionData): F[Unit] =
       OptionT(readData()).cata(f(empty), f) >>= write
 
-    override def listAll(): F[List[Session]] =
+    override def listAll: F[List[Session]] =
       readData().map(_.map(_.sessions).getOrElse(Nil))
 
     override def setup(session: Session): F[Unit] =
@@ -62,7 +67,7 @@ object SessionManager:
         SessionData(current = session.some, sessions = (session :: old.sessions).distinct)
       )
 
-    override def current(): F[Option[Session]] =
+    override def current: F[Option[Session]] =
       readData().map(_.flatMap(_.current))
 
 end SessionManager

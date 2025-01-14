@@ -40,7 +40,7 @@ object RepositoryProvisioner:
 
   val repoMetadataFile: String = ".alpasso"
 
-  def make[F[_]: Logger: Sync](repoDir: Path): Provisioner[F] =
+  def make[F[_] : {Logger, Sync}](repoDir: Path): Provisioner[F] =
     val alg = MetaProvisioner(repoDir)
 
     val gitted: Provisioner[Mid[F, *]] = GitProvisioner[F](repoDir)
@@ -49,7 +49,7 @@ object RepositoryProvisioner:
 
     (cs |+| gitted) attach alg
 
-  class CypherProvisioner[F[_]: Sync: Logger] extends Provisioner[Mid[F, *]] {
+  class CypherProvisioner[F[_] : {Sync, Logger}] extends Provisioner[Mid[F, *]] {
 
     override def provision(config: RepositoryMetaConfig): Mid[F, Either[ProvisionErr, Unit]] = {
       action =>
@@ -77,7 +77,7 @@ object RepositoryProvisioner:
       }
   }
 
-  class LoggingProvisioner[F[_]: Monad: Logger] extends Provisioner[Mid[F, *]]:
+  class LoggingProvisioner[F[_] : {Monad, Logger}] extends Provisioner[Mid[F, *]]:
 
     override def provision(config: RepositoryMetaConfig): Mid[F, Either[ProvisionErr, Unit]] =
       action =>
@@ -105,20 +105,21 @@ object RepositoryProvisioner:
       }
 
 enum RepoMetaErr:
-  case NotInitialized, InvalidFormat
+  case NotInitialized(path: Path)
+  case InvalidFormat(path: Path)
 
 object RepositoryConfigReader:
 
-  def make[F[_]: Sync as S: Logger]: RepositoryConfigReader[F] = (repoDir: Path) =>
+  def make[F[_] : {Sync as S, Logger}]: RepositoryConfigReader[F] = (repoDir: Path) =>
     import S.blocking
 
     val fullPath = repoDir.resolve(RepositoryProvisioner.repoMetadataFile)
 
     blocking(Files.exists(fullPath)).flatMap { exists =>
-      if !exists then RepoMetaErr.NotInitialized.asLeft.pure[F]
+      if !exists then RepoMetaErr.NotInitialized(fullPath).asLeft.pure[F]
       else
         for
           raw <- blocking(Files.readString(fullPath))
           ctx <- blocking(parser.parse(raw).flatMap(_.as[RepositoryMetaConfig]))
-        yield ctx.leftMap(_ => RepoMetaErr.InvalidFormat)
+        yield ctx.leftMap(_ => RepoMetaErr.InvalidFormat(fullPath))
     }

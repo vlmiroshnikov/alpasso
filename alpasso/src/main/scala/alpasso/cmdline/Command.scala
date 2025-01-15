@@ -63,7 +63,7 @@ def setupRemote[F[_] : Sync](
                               name: String,
                               url: String
                             )(configuration: RepositoryConfiguration): F[Result[Unit]] =
-  GitRepo.openExists(configuration.repoDir).use { git => git.addRemote(name, url).liftE[Err].value }
+  GitRepo.openExists(configuration.repoDir).use(_.addRemote(name, url).liftE[Err].value)
 
 def syncRemote[F[_]: Sync](configuration: RepositoryConfiguration): F[Result[Unit]] =
   GitRepo.openExists(configuration.repoDir).use { git =>

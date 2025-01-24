@@ -2,13 +2,6 @@ ThisBuild / scalaVersion       := Versions.scala
 ThisBuild / evictionErrorLevel := Level.Warn
 ThisBuild / version            := "0.0.1"
 
-lazy val core = project
-  .in(file("core"))
-  .settings(Settings.common)
-  .settings(
-    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.tagless ++ Deps.evo_circe
-  )
-
 lazy val alpasso = project
   .in(file("alpasso"))
   .enablePlugins(NativeImagePlugin)
@@ -33,10 +26,9 @@ lazy val alpasso = project
     buildInfoKeys := Seq[BuildInfoKey](name, ThisBuild / version, scalaVersion),
     buildInfoPackage := "alpasso.common.build"
   )
-  .dependsOn(core)
   .settings(Settings.common)
   .settings(
-    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.jgit ++ Deps.glass ++ Deps.circe ++ Deps.logstage ++ Deps.tagless ++ Deps.tofu ++ Deps.decline
+    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.jgit ++ Deps.glass ++ Deps.circe ++ Deps.logstage ++ Deps.tagless ++ Deps.tofu ++ Deps.decline ++ Deps.evo_circe
   )
 
 lazy val root = project

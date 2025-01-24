@@ -40,7 +40,7 @@ object RepositoryProvisioner:
 
   val repoMetadataFile: String = ".alpasso"
 
-  def make[F[_] : {Logger, Sync}](repoDir: Path): Provisioner[F] =
+  def make[F[_]: { Logger, Sync }](repoDir: Path): Provisioner[F] =
     val alg = MetaProvisioner(repoDir)
 
     val gitted: Provisioner[Mid[F, *]] = GitProvisioner[F](repoDir)
@@ -49,7 +49,7 @@ object RepositoryProvisioner:
 
     (cs |+| gitted) attach alg
 
-  class CypherProvisioner[F[_] : {Sync, Logger}] extends Provisioner[Mid[F, *]] {
+  class CypherProvisioner[F[_]: { Sync, Logger }] extends Provisioner[Mid[F, *]] {
 
     override def provision(config: RepositoryMetaConfig): Mid[F, Either[ProvisionErr, Unit]] = {
       action =>
@@ -77,7 +77,7 @@ object RepositoryProvisioner:
       }
   }
 
-  class LoggingProvisioner[F[_] : {Monad, Logger}] extends Provisioner[Mid[F, *]]:
+  class LoggingProvisioner[F[_]: { Monad, Logger }] extends Provisioner[Mid[F, *]]:
 
     override def provision(config: RepositoryMetaConfig): Mid[F, Either[ProvisionErr, Unit]] =
       action =>
@@ -110,7 +110,7 @@ enum RepoMetaErr:
 
 object RepositoryConfigReader:
 
-  def make[F[_] : {Sync as S, Logger}]: RepositoryConfigReader[F] = (repoDir: Path) =>
+  def make[F[_]: { Sync as S, Logger }]: RepositoryConfigReader[F] = (repoDir: Path) =>
     import S.blocking
 
     val fullPath = repoDir.resolve(RepositoryProvisioner.repoMetadataFile)

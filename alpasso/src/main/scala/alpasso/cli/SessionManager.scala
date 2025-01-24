@@ -18,16 +18,14 @@ case class Session(path: Path)
 
 trait SessionManager[F[_]]:
   def current: F[Option[Session]]
-
   def listAll: F[List[Session]]
   def setup(session: Session): F[Unit]
 
 object SessionManager:
 
-  def make[F[_] : Sync]: SessionManager[F] =
-    Impl[F]
+  def make[F[_]: Sync]: SessionManager[F] = Impl[F]
 
-  class Impl[F[_] : Sync as S] extends SessionManager[F]:
+  class Impl[F[_]: Sync as S] extends SessionManager[F]:
     import S.blocking
 
     private def sessionDir = {

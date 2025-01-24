@@ -129,8 +129,8 @@ object GitRepo:
         ).asRight
 
     override def commitFiles(
-                              files: NonEmptyList[Path],
-                              message: String): F[Either[GitError, RevCommit]] =
+        files: NonEmptyList[Path],
+        message: String): F[Either[GitError, RevCommit]] =
       blocking:
         val git        = new Git(repository)
         val addCommand = git.add()
@@ -146,8 +146,8 @@ object GitRepo:
           .asRight
 
     override def removeFiles(
-                              files: NonEmptyList[Path],
-                              message: String): F[Either[GitError, RevCommit]] =
+        files: NonEmptyList[Path],
+        message: String): F[Either[GitError, RevCommit]] =
       blocking:
         val git   = new Git(repository)
         val rmCmd = git.rm()

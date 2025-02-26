@@ -27,4 +27,5 @@ given Converter[Err, ErrorView] =
         ErrorView(s"${RED}Secret ${RESET}${BLUE}[${name.show}]${RESET} ${RED}not found${RESET}")
       case ee => ErrorView(s"Undefined error: ${ee}")
 
-  case ee => ErrorView(s"Undefined error: ${ee}")
+  case Err.CommandSyntaxError(help) => ErrorView(help, None)
+  case ee                           => ErrorView(s"Undefined error: ${ee}")

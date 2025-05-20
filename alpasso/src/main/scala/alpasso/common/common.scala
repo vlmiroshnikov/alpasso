@@ -4,7 +4,7 @@ import alpasso.cmdline.Err
 import alpasso.core.model.SecretPackage
 import alpasso.service.fs.model.{ RawMetadata, RawSecretData }
 
-type Result[A]    = Either[Err, A]
+type Result[A] = Either[Err, A]
 
 type RawPackage = SecretPackage[(RawSecretData, RawMetadata)]
 

@@ -57,7 +57,7 @@ object CypherService:
     override def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]] = raw.asRight.pure
     override def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]] = raw.asRight.pure
 
-  def gpg[F[_]: { Sync}](fg: String): CypherService[F] = GpgImpl[F](fg)
+  def gpg[F[_]: { Sync }](fg: String): CypherService[F] = GpgImpl[F](fg)
 
 @main
 def main(): Unit = {

@@ -8,19 +8,17 @@ import cats.effect.*
 import cats.syntax.all.*
 import cats.tagless.*
 
-import alpasso.common.{ SemVer }
+import alpasso.common.SemVer
 import alpasso.service.cypher.{ CypherAlg, CypherService }
 import alpasso.service.git.GitRepo
 
 import io.circe.*
 import io.circe.derivation.*
-
 import io.circe.syntax.given
 import tofu.higherKind.*
 import tofu.higherKind.Mid.*
 
-
-object PersistentModels:   
+object PersistentModels:
   given Configuration = Configuration.default.withSnakeCaseMemberNames
 
   case class RepositoryMetaConfig(version: SemVer, cryptoAlg: CypherAlg) derives ConfiguredCodec
@@ -83,7 +81,7 @@ object RepositoryProvisioner:
 
   class LoggingProvisioner[F[_]: Sync as F] extends Provisioner[Mid[F, *]]:
     import F.blocking
-    
+
     override def provision(config: RepositoryMetaConfig): Mid[F, Either[ProvisionErr, Unit]] =
       action =>
         blocking(println("start provisioning")) *>

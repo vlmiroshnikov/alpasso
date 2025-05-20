@@ -70,7 +70,7 @@ trait RepositoryMutator[F[_]] derives ApplyK:
 
 object RepositoryMutator:
 
-  def make[F[_]: { Async}](config: RepositoryConfiguration): RepositoryMutator[F] =
+  def make[F[_]: { Async }](config: RepositoryConfiguration): RepositoryMutator[F] =
     val gitted: RepositoryMutator[Mid[F, *]] = Gitted[F](config.repoDir)
     gitted attach Impl[F](config.repoDir)
 
@@ -201,8 +201,7 @@ object RepositoryReader:
     val lcs: RepositoryReader[Mid[F, *]]    = CypheredStorage[F](cs)
     (gitted |+| lcs) attach Impl[F](config.repoDir)
 
-  class CypheredStorage[F[_]: { Async }](cs: CypherService[F])
-      extends RepositoryReader[Mid[F, *]] {
+  class CypheredStorage[F[_]: { Async }](cs: CypherService[F]) extends RepositoryReader[Mid[F, *]] {
 
     override def loadPayload(
         secret: SecretPackage[Path]): Mid[F, Result[SecretPackage[RawSecretData]]] =

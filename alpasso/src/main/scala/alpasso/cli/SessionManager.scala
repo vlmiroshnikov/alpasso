@@ -69,7 +69,6 @@ object SessionManager:
 
 end SessionManager
 
-
 object models:
   given Configuration = Configuration.default.withSnakeCaseMemberNames
 

@@ -47,7 +47,7 @@ object Err:
     ge => summon[Upcast[Err, RepositoryErr]].upcast(fromGitError(ge)) // todo fix it
 end Err
 
-def bootstrap[F[_]: { Sync}](
+def bootstrap[F[_]: { Sync }](
     repoDir: Path,
     version: SemVer,
     cypher: CypherAlg): F[Result[StorageView]] =
@@ -93,7 +93,7 @@ trait Command[F[_]]:
 
 object Command:
 
-  def make[F[_]: { Async}](config: RepositoryConfiguration): Command[F] =
+  def make[F[_]: { Async }](config: RepositoryConfiguration): Command[F] =
     val cs = config.cypherAlg match
       case CypherAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
 

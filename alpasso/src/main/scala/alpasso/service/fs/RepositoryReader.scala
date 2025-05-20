@@ -20,7 +20,6 @@ import cats.effect.*
 import cats.syntax.all.*
 import cats.tagless.*
 
-import alpasso.common.Logger
 import alpasso.common.syntax.*
 import alpasso.core.model.*
 import alpasso.service.cypher
@@ -30,7 +29,6 @@ import alpasso.service.git.{ GitError, GitRepo }
 
 import glass.Upcast
 import io.circe.*
-import logstage.LogIO
 import tofu.higherKind.*
 import tofu.higherKind.Mid.*
 
@@ -72,11 +70,11 @@ trait RepositoryMutator[F[_]] derives ApplyK:
 
 object RepositoryMutator:
 
-  def make[F[_]: { Async, Logger }](config: RepositoryConfiguration): RepositoryMutator[F] =
+  def make[F[_]: { Async}](config: RepositoryConfiguration): RepositoryMutator[F] =
     val gitted: RepositoryMutator[Mid[F, *]] = Gitted[F](config.repoDir)
     gitted attach Impl[F](config.repoDir)
 
-  class Impl[F[_]: { Logger, Sync as F }](repoDir: Path) extends RepositoryMutator[F] {
+  class Impl[F[_]: { Sync as F }](repoDir: Path) extends RepositoryMutator[F] {
 
     import F.blocking
     import Files.*
@@ -196,14 +194,14 @@ trait RepositoryReader[F[_]] derives ApplyK:
 
 object RepositoryReader:
 
-  def make[F[_]: { Async, Logger }](
+  def make[F[_]: { Async }](
       config: RepositoryConfiguration,
       cs: CypherService[F]): RepositoryReader[F] =
     val gitted: RepositoryReader[Mid[F, *]] = Gitted[F](config.repoDir)
     val lcs: RepositoryReader[Mid[F, *]]    = CypheredStorage[F](cs)
     (gitted |+| lcs) attach Impl[F](config.repoDir)
 
-  class CypheredStorage[F[_]: { Async, Logger }](cs: CypherService[F])
+  class CypheredStorage[F[_]: { Async }](cs: CypherService[F])
       extends RepositoryReader[Mid[F, *]] {
 
     override def loadPayload(

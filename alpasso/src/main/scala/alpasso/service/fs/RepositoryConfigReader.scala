@@ -8,22 +8,25 @@ import cats.effect.*
 import cats.syntax.all.*
 import cats.tagless.*
 
-import alpasso.common.{ Logger, SemVer }
+import alpasso.common.{ SemVer }
 import alpasso.service.cypher.{ CypherAlg, CypherService }
 import alpasso.service.git.GitRepo
 
-import evo.derivation.*
-import evo.derivation.circe.*
-import evo.derivation.config.Config
 import io.circe.*
+import io.circe.derivation.*
+
 import io.circe.syntax.given
-import logstage.LogIO
-import logstage.LogIO.log
 import tofu.higherKind.*
 import tofu.higherKind.Mid.*
 
-@SnakeCase
-case class RepositoryMetaConfig(version: SemVer, cryptoAlg: CypherAlg) derives Config, EvoCodec
+
+object PersistentModels:   
+  given Configuration = Configuration.default.withSnakeCaseMemberNames
+
+  case class RepositoryMetaConfig(version: SemVer, cryptoAlg: CypherAlg) derives ConfiguredCodec
+end PersistentModels
+
+import PersistentModels.*
 
 trait RepositoryConfigReader[F[_]]:
   def read(path: Path): F[Either[RepoMetaErr, RepositoryMetaConfig]]
@@ -40,7 +43,7 @@ object RepositoryProvisioner:
 
   val repoMetadataFile: String = ".alpasso"
 
-  def make[F[_]: { Logger, Sync }](repoDir: Path): Provisioner[F] =
+  def make[F[_]: { Sync }](repoDir: Path): Provisioner[F] =
     val alg = MetaProvisioner(repoDir)
 
     val gitted: Provisioner[Mid[F, *]] = GitProvisioner[F](repoDir)
@@ -49,12 +52,13 @@ object RepositoryProvisioner:
 
     (cs |+| gitted) attach alg
 
-  class CypherProvisioner[F[_]: { Sync, Logger }] extends Provisioner[Mid[F, *]] {
+  class CypherProvisioner[F[_]: { Sync }] extends Provisioner[Mid[F, *]] {
 
     override def provision(config: RepositoryMetaConfig): Mid[F, Either[ProvisionErr, Unit]] = {
       action =>
         val cs = config.cryptoAlg match
           case CypherAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
+
         (for
           _ <- EitherT.liftF(cs.encrypt(Array[Byte](1)))
           r <- EitherT(action)
@@ -77,14 +81,15 @@ object RepositoryProvisioner:
       }
   }
 
-  class LoggingProvisioner[F[_]: { Monad, Logger }] extends Provisioner[Mid[F, *]]:
-
+  class LoggingProvisioner[F[_]: Sync as F] extends Provisioner[Mid[F, *]]:
+    import F.blocking
+    
     override def provision(config: RepositoryMetaConfig): Mid[F, Either[ProvisionErr, Unit]] =
       action =>
-        log.info("start provisioning") *>
+        blocking(println("start provisioning")) *>
           action.flatTap {
-            case Left(e)  => log.error(s"Failed provisioning ${e}")
-            case Right(_) => log.info("Provisioning completed")
+            case Left(e)  => blocking(println(s"Failed provisioning ${e}"))
+            case Right(_) => blocking(println("Provisioning completed"))
           }
 
   class MetaProvisioner[F[_]: Sync as F](repoDir: Path) extends Provisioner[F]:
@@ -110,7 +115,7 @@ enum RepoMetaErr:
 
 object RepositoryConfigReader:
 
-  def make[F[_]: { Sync as S, Logger }]: RepositoryConfigReader[F] = (repoDir: Path) =>
+  def make[F[_]: { Sync as S }]: RepositoryConfigReader[F] = (repoDir: Path) =>
     import S.blocking
 
     val fullPath = repoDir.resolve(RepositoryProvisioner.repoMetadataFile)

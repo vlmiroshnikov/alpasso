@@ -18,16 +18,9 @@ import alpasso.core.model.*
 import alpasso.service.fs.RepositoryConfigReader
 import alpasso.service.fs.model.*
 
-import logstage.{ IzLogger, Level, LogIO }
-
 object CliApp extends IOApp:
 
   override def run(args: List[String]): IO[ExitCode] =
-
-    val logger = IzLogger(levels = Map("org.eclipse.jgit" -> Level.Info))
-
-    given LogIO[IO] = LogIO.fromLogger(logger)
-    // StaticLogRouter.instance.setup(logger.router)
 
     val smgr = SessionManager.make[IO]
     val rmr  = RepositoryConfigReader.make[IO]

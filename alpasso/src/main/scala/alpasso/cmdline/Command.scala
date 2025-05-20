@@ -9,7 +9,7 @@ import cats.syntax.all.*
 
 import alpasso.cmdline.view.{ *, given }
 import alpasso.common.syntax.*
-import alpasso.common.{ Logger, RawPackage, Result, SemVer }
+import alpasso.common.{ RawPackage, Result, SemVer }
 import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
@@ -47,12 +47,12 @@ object Err:
     ge => summon[Upcast[Err, RepositoryErr]].upcast(fromGitError(ge)) // todo fix it
 end Err
 
-def bootstrap[F[_]: { Sync, Logger }](
+def bootstrap[F[_]: { Sync}](
     repoDir: Path,
     version: SemVer,
     cypher: CypherAlg): F[Result[StorageView]] =
   val provisioner = RepositoryProvisioner.make(repoDir)
-  val config      = RepositoryMetaConfig(version, cypher)
+  val config      = PersistentModels.RepositoryMetaConfig(version, cypher)
   provisioner.provision(config).liftE[Err].map(_ => StorageView(repoDir, cypher)).value
 
 def historyLog[F[_]: Sync](configuration: RepositoryConfiguration): F[Result[HistoryLogView]] =
@@ -93,7 +93,7 @@ trait Command[F[_]]:
 
 object Command:
 
-  def make[F[_]: { Async, Logger }](config: RepositoryConfiguration): Command[F] =
+  def make[F[_]: { Async}](config: RepositoryConfiguration): Command[F] =
     val cs = config.cypherAlg match
       case CypherAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
 
@@ -101,7 +101,7 @@ object Command:
     val mutator = RepositoryMutator.make(config)
     Impl[F](cs, reader, mutator)
 
-  private class Impl[F[_]: { Async, Logger }](
+  private class Impl[F[_]: { Async }](
       cs: CypherService[F],
       reader: RepositoryReader[F],
       mutator: RepositoryMutator[F])

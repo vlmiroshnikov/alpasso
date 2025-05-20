@@ -28,7 +28,7 @@ lazy val alpasso = project
   )
   .settings(Settings.common)
   .settings(
-    libraryDependencies ++= Deps.cats ++ Deps.catsEffect ++ Deps.jgit ++ Deps.glass ++ Deps.circe ++ Deps.logstage ++ Deps.tagless ++ Deps.tofu ++ Deps.decline ++ Deps.evo_circe
+    libraryDependencies ++= Deps.infra ++ Deps.jgit ++ Deps.circe ++ Deps.decline 
   )
 
 lazy val root = project

@@ -6,7 +6,7 @@ import cats.*
 import cats.syntax.all.*
 
 import alpasso.cmdline.view.{ OutputFormat, SecretFilter }
-import alpasso.core.model.{ SecretMetadata, SecretName, SecretPayload }
+import alpasso.core.model.{ SecretMetadata, SecretName, SecretPayload, SensetiveMode }
 import alpasso.service.cypher.CypherAlg
 
 import com.monovore.decline.*
@@ -26,7 +26,7 @@ enum Action:
   case Repo(ops: RepoOp)
   case New(name: SecretName, secret: Option[SecretPayload], meta: Option[SecretMetadata])
   case Patch(name: SecretName, payload: Option[SecretPayload], meta: Option[SecretMetadata])
-  case Filter(where: SecretFilter, format: OutputFormat)
+  case Filter(where: SecretFilter, format: OutputFormat, sensetiveMode: SensetiveMode)
   case Remove(name: SecretName)
 
 object ArgParser:
@@ -98,8 +98,14 @@ object ArgParser:
       .option[String]("output", "Table | Tree", "o")
       .map(s => OutputFormat.withNameInvariant(s).getOrElse(OutputFormat.Tree))
       .orNone
-    (grep, output).mapN((v, o) =>
-      Action.Filter(v.getOrElse(SecretFilter.Empty), o.getOrElse(OutputFormat.Tree))
+
+    val smode = Opts.flag("unmasked", "Unmasked sensetive data in console output").orFalse
+
+    (grep, output, smode).mapN((v, o, m) =>
+      Action.Filter(v.getOrElse(SecretFilter.Empty),
+                    o.getOrElse(OutputFormat.Tree),
+                    if m then SensetiveMode.Show else SensetiveMode.Masked
+      )
     )
   }
 

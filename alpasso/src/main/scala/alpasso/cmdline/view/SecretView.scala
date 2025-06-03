@@ -20,7 +20,14 @@ given Converter[RawPackage, SecretView] =
 
 object SecretView:
 
-  given Show[SecretView] = Show.show { s =>
+  given (
+      using
+      mode: SensetiveMode): Show[SecretView] = Show.show { s =>
+
+    val secret = mode match
+      case SensetiveMode.Show   => s.payload.getOrElse("")
+      case SensetiveMode.Masked => "*******"
+
     val tags = s.metadata.fold("")(_.asMap.map((k, v) => s"$k=$v").mkString(","))
-    s"${GREEN}${s.name}${RESET} $BLUE${s.payload.getOrElse("******")}$RESET $YELLOW$tags$RESET"
+    s"${GREEN}${s.name.show}${RESET} $BLUE${secret}$RESET $YELLOW$tags$RESET"
   }

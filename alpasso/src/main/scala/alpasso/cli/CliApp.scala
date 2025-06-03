@@ -28,6 +28,8 @@ object CliApp extends IOApp:
     given [A: Show]: Show[Option[A]] =
       Show.show[Option[A]](_.fold("empty")(_.show))
 
+    given SensetiveMode = SensetiveMode.Masked
+
     def handle[T: Show](result: Result[T]): IO[ExitCode] =
       result match
         case Left(e)  => IO.println(e.into().show).as(ExitCode.Error)
@@ -80,11 +82,13 @@ object CliApp extends IOApp:
       case Right(Action.Patch(sn, spOpt, smOpt)) =>
         provideCommand(_.patch(sn, spOpt, smOpt)) >>= handle
 
-      case Right(Action.Filter(where, OutputFormat.Tree)) =>
+      case Right(Action.Filter(where, OutputFormat.Tree, smode)) =>
+        given SensetiveMode = smode
         provideCommand(_.filter(where)) >>= handle
 
-      case Right(Action.Filter(where, OutputFormat.Table)) =>
-        val res = provideCommand(_.filter(where))
+      case Right(Action.Filter(where, OutputFormat.Table, smode)) =>
+        given SensetiveMode = smode
+        val res             = provideCommand(_.filter(where))
         val buildTableView = res
           .nested
           .nested

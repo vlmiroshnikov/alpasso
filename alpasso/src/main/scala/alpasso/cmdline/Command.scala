@@ -110,7 +110,7 @@ object Command:
     override def filter(filter: SecretFilter): F[Result[Option[Node[Branch[SecretView]]]]] =
       def predicate(p: RawPackage): Boolean =
         filter match
-          case SecretFilter.Grep(pattern) => p.name.contains(pattern)
+          case SecretFilter.Grep(pattern) => p.name.asPath.toString.contains(pattern)
           case SecretFilter.Empty         => true
 
       def load(s: SecretPackage[RawStoreLocations]) =

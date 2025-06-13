@@ -4,7 +4,6 @@ import java.nio.charset.Charset
 
 import cats.Show
 import cats.data.{ Validated, ValidatedNel }
-import cats.syntax.all.*
 import cats.syntax.option.*
 
 opaque type SecretPayload = Array[Byte]

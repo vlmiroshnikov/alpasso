@@ -6,7 +6,7 @@ import cats.*
 import cats.syntax.all.*
 
 import alpasso.cmdline.view.{ OutputFormat, SecretFilter }
-import alpasso.core.model.{ SecretMetadata, SecretName, SecretPayload, SensetiveMode }
+import alpasso.core.model.{SecretMetadata, SecretName, SecretPayload, SensitiveMode}
 import alpasso.service.cypher.CypherAlg
 
 import com.monovore.decline.*
@@ -26,7 +26,7 @@ enum Action:
   case Repo(ops: RepoOp)
   case New(name: SecretName, secret: Option[SecretPayload], meta: Option[SecretMetadata])
   case Patch(name: SecretName, payload: Option[SecretPayload], meta: Option[SecretMetadata])
-  case Filter(where: SecretFilter, format: OutputFormat, sensetiveMode: SensetiveMode)
+  case Filter(where: SecretFilter, format: OutputFormat, sensetiveMode: SensitiveMode)
   case Remove(name: SecretName)
 
 object ArgParser:
@@ -104,7 +104,7 @@ object ArgParser:
     (grep, output, smode).mapN((v, o, m) =>
       Action.Filter(v.getOrElse(SecretFilter.Empty),
                     o.getOrElse(OutputFormat.Tree),
-                    if m then SensetiveMode.Show else SensetiveMode.Masked
+        if m then SensitiveMode.Show else SensitiveMode.Masked
       )
     )
   }

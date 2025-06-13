@@ -7,7 +7,7 @@ import cats.syntax.all.*
 
 import alpasso.cli.Session
 import alpasso.common.Converter
-import alpasso.core.model.SensetiveMode
+import alpasso.core.model.SensitiveMode
 
 case class TableView(rows: List[SecretView])
 
@@ -15,13 +15,13 @@ object TableView:
 
   given (
       using
-      mode: SensetiveMode): Show[TableView] = Show.show { tab =>
+      mode: SensitiveMode): Show[TableView] = Show.show { tab =>
     val rows = tab.rows.zipWithIndex
     val rw = rows.map { r =>
       val tags = r._1.metadata.fold("")(_.asMap.map((k, v) => s"${k}=${v}").mkString(","))
       val secret = mode match
-        case SensetiveMode.Show   => r._1.payload.getOrElse("")
-        case SensetiveMode.Masked => "*******"
+        case SensitiveMode.Show => r._1.payload.getOrElse("")
+        case SensitiveMode.Masked => "*******"
 
       f"|${r._2}%2d | ${GREEN}${r._1.name}%-40s${RESET} | ${secret}%-12s | ${YELLOW}${tags}%-64s${RESET} |"
     }

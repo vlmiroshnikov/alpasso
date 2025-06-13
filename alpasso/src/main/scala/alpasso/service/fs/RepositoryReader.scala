@@ -84,7 +84,7 @@ object RepositoryMutator:
     val UpdateOps: List[OpenOption] = List(CREATE, TRUNCATE_EXISTING, WRITE)
 
     override def remove(name: SecretName): F[Result[RawStoreLocations]] =
-      val path = repoDir.resolve(name)
+      val path = repoDir.resolve(name.asPath)
 
       val metaPath    = path.resolve("meta")
       val payloadPath = path.resolve("payload")
@@ -103,7 +103,7 @@ object RepositoryMutator:
         name: SecretName,
         payload: RawSecretData,
         meta: RawMetadata): F[Result[RawStoreLocations]] =
-      val path = repoDir.resolve(name)
+      val path = repoDir.resolve(name.asPath)
 
       val metaPath    = path.resolve("meta")
       val payloadPath = path.resolve("payload")
@@ -122,7 +122,7 @@ object RepositoryMutator:
         name: SecretName,
         payload: RawSecretData,
         metadata: RawMetadata): F[Result[RawStoreLocations]] =
-      val path = repoDir.resolve(name)
+      val path = repoDir.resolve(name.asPath)
 
       val metaPath    = path.resolve("meta")
       val payloadPath = path.resolve("payload")

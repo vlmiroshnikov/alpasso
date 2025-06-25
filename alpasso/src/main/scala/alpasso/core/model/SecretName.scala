@@ -14,10 +14,14 @@ object SecretName:
 
   extension (s: SecretName)
 
-    def shortName: String = {
-      val last = Spliterators.iterator(s.spliterator()).asScala.toList.last
-      last.toString
-    }
+    def shortName: String =
+      Spliterators
+        .iterator(s.spliterator())
+        .asScala
+        .toList
+        .lastOption
+        .map(_.toString())
+        .getOrElse("")
 
     def asPath: Path = s
 

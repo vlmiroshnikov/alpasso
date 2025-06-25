@@ -25,7 +25,7 @@ object SecretView:
       mode: SensitiveMode): Show[SecretView] = Show.show { s =>
 
     val secret = mode match
-      case SensitiveMode.Show => s.payload.getOrElse("")
+      case SensitiveMode.Show   => s.payload.getOrElse("")
       case SensitiveMode.Masked => "*******"
 
     val tags = s.metadata.fold("")(_.asMap.map((k, v) => s"$k=$v").mkString(","))

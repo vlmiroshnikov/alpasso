@@ -6,7 +6,7 @@ import cats.*
 import cats.syntax.all.*
 
 import alpasso.cmdline.view.{ OutputFormat, SecretFilter }
-import alpasso.core.model.{SecretMetadata, SecretName, SecretPayload, SensitiveMode}
+import alpasso.core.model.{ SecretMetadata, SecretName, SecretPayload, SensitiveMode }
 import alpasso.service.cypher.CypherAlg
 
 import com.monovore.decline.*
@@ -104,7 +104,7 @@ object ArgParser:
     (grep, output, smode).mapN((v, o, m) =>
       Action.Filter(v.getOrElse(SecretFilter.Empty),
                     o.getOrElse(OutputFormat.Tree),
-        if m then SensitiveMode.Show else SensitiveMode.Masked
+                    if m then SensitiveMode.Show else SensitiveMode.Masked
       )
     )
   }

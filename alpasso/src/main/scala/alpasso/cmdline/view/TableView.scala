@@ -20,7 +20,7 @@ object TableView:
     val rw = rows.map { r =>
       val tags = r._1.metadata.fold("")(_.asMap.map((k, v) => s"${k}=${v}").mkString(","))
       val secret = mode match
-        case SensitiveMode.Show => r._1.payload.getOrElse("")
+        case SensitiveMode.Show   => r._1.payload.getOrElse("")
         case SensitiveMode.Masked => "*******"
 
       f"|${r._2}%2d | ${GREEN}${r._1.name}%-40s${RESET} | ${secret}%-12s | ${YELLOW}${tags}%-64s${RESET} |"

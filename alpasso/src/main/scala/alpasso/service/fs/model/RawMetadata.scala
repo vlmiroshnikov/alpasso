@@ -24,8 +24,8 @@ object RawMetadata:
 
   extension (m: RawMetadata) def rawString: String = Printer.noSpaces.print(m.asJson)
 
-  given Show[RawMetadata] =
-    Show.show(v => v.toList.map((a, b) => s"$a=$b").mkString(","))
+  // given Show[RawMetadata] =
+  //   Show.show(v => v.toList.map((a, b) => s"$a=$b").mkString(","))
 
   def of(kv: Map[String, String]): RawMetadata = kv
 

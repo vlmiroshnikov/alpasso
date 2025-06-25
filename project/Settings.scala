@@ -35,5 +35,5 @@ object Deps {
   lazy val circe     = Seq("io.circe" %% "circe-core", "io.circe" %% "circe-parser").map(_ % Versions.circe)
   lazy val decline   = Seq("com.monovore" %% "decline" % "2.5.0")
   lazy val logger    = Seq("org.slf4j" % "slf4j-nop" % "2.0.17")
-  lazy val munit = Seq("org.scalameta" %% "munit" % "1.1.1" % Test)
+  lazy val munit     = Seq("org.scalameta" %% "munit" % "1.1.1" % Test)
 }

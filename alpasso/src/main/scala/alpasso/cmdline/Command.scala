@@ -7,9 +7,10 @@ import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
 
+import alpasso.cmdline.view.SimpleMetadataView.given
 import alpasso.cmdline.view.{ *, given }
 import alpasso.common.syntax.*
-import alpasso.common.{ RawPackage, Result, SemVer }
+import alpasso.common.{Package, Result, SemVer}
 import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
@@ -108,13 +109,13 @@ object Command:
       extends Command[F]:
 
     override def filter(filter: SecretFilter): F[Result[Option[Node[Branch[SecretView]]]]] =
-      def predicate(p: RawPackage): Boolean =
+      def predicate(p: Package): Boolean =
         filter match
           case SecretFilter.Grep(pattern) => p.name.asPath.toString.contains(pattern)
           case SecretFilter.Empty         => true
 
       def load(s: SecretPackage[RawStoreLocations]) =
-        reader.loadFully(s).liftE[Err]
+        reader.loadFully(s).liftE[Err].nested.map((d, m) => (d.into(), m.into())).value
 
       val result = for
         rawTree <- reader.walkTree.liftE[Err]
@@ -131,8 +132,8 @@ object Command:
       val result =
         for
           data      <- cs.encrypt(payload.rawData).liftE[Err]
-          locations <- mutator.create(name, RawSecretData.from(data), rmd).liftE[Err]
-        yield SecretView(name, None, meta)
+          locations <- mutator.create(name, RawSecretData.fromRaw(data), rmd).liftE[Err]
+        yield SecretView(name, None, meta.map(_.into()))
 
       result.value
 
@@ -170,7 +171,7 @@ object Command:
           rmd = meta.map(RawMetadata.from).getOrElse(toUpdate.payload._2)
 
           sec       <- cs.encrypt(rsd).liftE[Err]
-          locations <- mutator.update(name, RawSecretData.from(sec), rmd).liftE[Err]
+          locations <- mutator.update(name, RawSecretData.fromRaw(sec), rmd).liftE[Err]
         yield SecretView(name, None, None)
 
       result.value

@@ -131,7 +131,7 @@ object GitRepo:
     override def commitFiles(
         files: NonEmptyList[Path],
         message: String): F[Either[GitError, RevCommit]] =
-      Git.wrap(repository).commitable(message) { git =>
+      Git.wrap(repository).committable(message) { git =>
         val addCmd = git.add()
         files
           .map(file => Repository.stripWorkDir(repository.getWorkTree, file.toFile))
@@ -143,7 +143,7 @@ object GitRepo:
         files: NonEmptyList[Path],
         message: String): F[Either[GitError, RevCommit]] =
 
-      Git.wrap(repository).commitable(message) { git =>
+      Git.wrap(repository).committable(message) { git =>
         val rmCmd = git.rm()
         files
           .map(file => Repository.stripWorkDir(repository.getWorkTree, file.toFile))
@@ -153,5 +153,5 @@ object GitRepo:
 
 extension [F[_]: Sync as F](git: Git)
 
-  def commitable(message: String)(f: Git => Unit): F[Result[RevCommit]] =
+  def committable(message: String)(f: Git => Unit): F[Result[RevCommit]] =
     F.blocking(f(git)) *> F.blocking(git.commit().setMessage(message).call().asRight)

@@ -11,9 +11,9 @@ import io.circe.syntax.*
 
 opaque type RawMetadata = Map[String, String]
 
-given Converter[RawMetadata, SecretMetadata] = SecretMetadata.from
-
 object RawMetadata:
+
+  given Converter[RawMetadata, SecretMetadata] = SecretMetadata.from
 
   def from(meta: SecretMetadata): RawMetadata =
     of(meta.asMap)
@@ -23,9 +23,6 @@ object RawMetadata:
     else RawMetadata.empty.asRight
 
   extension (m: RawMetadata) def rawString: String = Printer.noSpaces.print(m.asJson)
-
-  // given Show[RawMetadata] =
-  //   Show.show(v => v.toList.map((a, b) => s"$a=$b").mkString(","))
 
   def of(kv: Map[String, String]): RawMetadata = kv
 

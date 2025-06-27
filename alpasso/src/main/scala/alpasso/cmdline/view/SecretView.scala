@@ -3,20 +3,19 @@ package alpasso.cmdline.view
 import cats.*
 import cats.syntax.all.*
 
-import alpasso.common.{ Converter, RawPackage }
+import alpasso.common.{Converter, Package}
 import alpasso.core.model.*
-import alpasso.service.fs.model.given
-import alpasso.service.fs.model.{ RawMetadata, RawSecretData }
 
 import Console.*
+import SimpleMetadataView.given
 
 case class SecretView(
     name: SecretName,
     payload: Option[String] = None,
-    metadata: Option[SecretMetadata])
+    metadata: Option[SimpleMetadataView])
 
-given Converter[RawPackage, SecretView] =
-  rp => SecretView(rp.name, new String(rp.payload._1.byteArray).some, rp.payload._2.into().some)
+given Converter[Package, SecretView] =
+  rp => SecretView(rp.name, new String(rp.payload._1.rawData).some, rp.payload._2.into().some)
 
 object SecretView:
 
@@ -28,6 +27,6 @@ object SecretView:
       case SensitiveMode.Show   => s.payload.getOrElse("")
       case SensitiveMode.Masked => "*******"
 
-    val tags = s.metadata.fold("")(_.asMap.map((k, v) => s"$k=$v").mkString(","))
-    s"${GREEN}${s.name.show}${RESET} $BLUE${secret}$RESET $YELLOW$tags$RESET"
+    val meta = s.metadata.fold("")(_.show)
+    s"${GREEN}${s.name.show}${RESET} $BLUE${secret}$RESET $meta"
   }

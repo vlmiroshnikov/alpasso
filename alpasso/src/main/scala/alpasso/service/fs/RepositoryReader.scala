@@ -190,7 +190,7 @@ trait RepositoryReader[F[_]] derives ApplyK:
   def loadMeta(secret: SecretPackage[Path]): F[PackResult[RawMetadata]]
 
   def loadFully(
-                 secret: SecretPackage[RawStoreLocations]): F[PackResult[(RawSecretData, RawMetadata)]]
+      secret: SecretPackage[RawStoreLocations]): F[PackResult[(RawSecretData, RawMetadata)]]
   def walkTree: F[Result[Node[Branch[SecretPackage[RawStoreLocations]]]]]
 
 object RepositoryReader:
@@ -298,7 +298,7 @@ object RepositoryReader:
           RepositoryErr.Corrupted(secret.name).asLeft[SecretPackage[RawSecretData]].pure[F]
         else
           for raw <- blocking(Files.readAllBytes(path))
-            yield SecretPackage(secret.name, RawSecretData.fromRaw(raw)).asRight
+          yield SecretPackage(secret.name, RawSecretData.fromRaw(raw)).asRight
       }
 
 end RepositoryReader

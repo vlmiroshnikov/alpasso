@@ -3,7 +3,7 @@ package alpasso.cmdline.view
 import cats.*
 import cats.syntax.all.*
 
-import alpasso.common.{Converter, Package}
+import alpasso.common.{ Converter, Package }
 import alpasso.core.model.*
 
 import Console.*

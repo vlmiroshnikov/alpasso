@@ -10,7 +10,7 @@ import cats.syntax.all.*
 import alpasso.cmdline.view.SimpleMetadataView.given
 import alpasso.cmdline.view.{ *, given }
 import alpasso.common.syntax.*
-import alpasso.common.{Package, Result, SemVer}
+import alpasso.common.{ Package, Result, SemVer }
 import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*

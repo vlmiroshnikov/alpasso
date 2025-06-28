@@ -24,13 +24,13 @@ object Settings {
 object Deps {
   lazy val cats       = Seq("org.typelevel" %% "cats-core").map(_ % Versions.cats)
   lazy val catsEffect = Seq("org.typelevel" %% "cats-effect").map(_ % Versions.catsEffect)
-  lazy val tagless = Seq("org.typelevel" %% "cats-tagless-core" % "0.16.3")
+  lazy val tagless    = Seq("org.typelevel" %% "cats-tagless-core" % "0.16.3")
   lazy val glass      = Seq("tf.tofu" %% "glass-core" % "0.3.0")
-  lazy val tofu = Seq("tf.tofu" %% "tofu-core-higher-kind" % "0.13.7")
+  lazy val tofu       = Seq("tf.tofu" %% "tofu-core-higher-kind" % "0.13.7")
 
   lazy val infra      = cats ++ catsEffect ++ tagless ++ glass ++ tofu
 
-  lazy val jgit  = Seq("org.eclipse.jgit" % "org.eclipse.jgit" % "6.5.0.202303070854-r")
+  lazy val jgit       = Seq("org.eclipse.jgit" % "org.eclipse.jgit" % "6.5.0.202303070854-r")
 
   lazy val circe     = Seq("io.circe" %% "circe-core", "io.circe" %% "circe-parser").map(_ % Versions.circe)
   lazy val decline   = Seq("com.monovore" %% "decline" % "2.5.0")

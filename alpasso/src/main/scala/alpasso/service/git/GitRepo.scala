@@ -131,33 +131,27 @@ object GitRepo:
     override def commitFiles(
         files: NonEmptyList[Path],
         message: String): F[Either[GitError, RevCommit]] =
-      blocking:
-        val git        = new Git(repository)
-        val addCommand = git.add()
+      Git.wrap(repository).committable(message) { git =>
+        val addCmd = git.add()
         files
           .map(file => Repository.stripWorkDir(repository.getWorkTree, file.toFile))
-          .traverse(file => Try(addCommand.addFilepattern(file)).toEither)
-        addCommand.call()
-
-        git
-          .commit()
-          .setMessage(message)
-          .call()
-          .asRight
+          .traverse(file => Try(addCmd.addFilepattern(file)).toEither)
+        addCmd.call()
+      }
 
     override def removeFiles(
         files: NonEmptyList[Path],
         message: String): F[Either[GitError, RevCommit]] =
-      blocking:
-        val git   = new Git(repository)
+
+      Git.wrap(repository).committable(message) { git =>
         val rmCmd = git.rm()
         files
           .map(file => Repository.stripWorkDir(repository.getWorkTree, file.toFile))
           .traverse(file => Try(rmCmd.addFilepattern(file)).toEither)
         rmCmd.call()
+      }
 
-        git
-          .commit()
-          .setMessage(message)
-          .call()
-          .asRight
+extension [F[_]: Sync as F](git: Git)
+
+  def committable(message: String)(f: Git => Unit): F[Result[RevCommit]] =
+    F.blocking(f(git)) *> F.blocking(git.commit().setMessage(message).call().asRight)

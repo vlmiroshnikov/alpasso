@@ -8,10 +8,8 @@ import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
 
-import evo.derivation.*
-import evo.derivation.circe.*
-import evo.derivation.config.Config
 import io.circe.*
+import io.circe.derivation.*
 import io.circe.syntax.given
 
 case class Session(path: Path)
@@ -22,6 +20,7 @@ trait SessionManager[F[_]]:
   def setup(session: Session): F[Unit]
 
 object SessionManager:
+  import models.*
 
   def make[F[_]: Sync]: SessionManager[F] = Impl[F]
 
@@ -70,9 +69,11 @@ object SessionManager:
 
 end SessionManager
 
-@SnakeCase
-case class SessionData(current: Option[Session], sessions: List[Session]) derives Config, EvoCodec
+object models:
+  given Configuration = Configuration.default.withSnakeCaseMemberNames
 
-object SessionData:
-  given Encoder[Session] = Encoder.encodeString.contramap(_.path.toString)
-  given Decoder[Session] = Decoder.decodeString.map(s => Session(Path.of(s)))
+  case class SessionData(current: Option[Session], sessions: List[Session]) derives ConfiguredCodec
+
+  object SessionData:
+    given Encoder[Session] = Encoder.encodeString.contramap(_.path.toString)
+    given Decoder[Session] = Decoder.decodeString.map(s => Session(Path.of(s)))

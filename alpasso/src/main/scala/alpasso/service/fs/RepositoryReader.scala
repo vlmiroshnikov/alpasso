@@ -20,7 +20,6 @@ import cats.effect.*
 import cats.syntax.all.*
 import cats.tagless.*
 
-import alpasso.common.Logger
 import alpasso.common.syntax.*
 import alpasso.core.model.*
 import alpasso.service.cypher
@@ -30,7 +29,6 @@ import alpasso.service.git.{ GitError, GitRepo }
 
 import glass.Upcast
 import io.circe.*
-import logstage.LogIO
 import tofu.higherKind.*
 import tofu.higherKind.Mid.*
 
@@ -72,11 +70,11 @@ trait RepositoryMutator[F[_]] derives ApplyK:
 
 object RepositoryMutator:
 
-  def make[F[_]: { Async, Logger }](config: RepositoryConfiguration): RepositoryMutator[F] =
+  def make[F[_]: { Async }](config: RepositoryConfiguration): RepositoryMutator[F] =
     val gitted: RepositoryMutator[Mid[F, *]] = Gitted[F](config.repoDir)
     gitted attach Impl[F](config.repoDir)
 
-  class Impl[F[_]: { Logger, Sync as F }](repoDir: Path) extends RepositoryMutator[F] {
+  class Impl[F[_]: { Sync as F }](repoDir: Path) extends RepositoryMutator[F] {
 
     import F.blocking
     import Files.*
@@ -86,7 +84,7 @@ object RepositoryMutator:
     val UpdateOps: List[OpenOption] = List(CREATE, TRUNCATE_EXISTING, WRITE)
 
     override def remove(name: SecretName): F[Result[RawStoreLocations]] =
-      val path = repoDir.resolve(name)
+      val path = repoDir.resolve(name.asPath)
 
       val metaPath    = path.resolve("meta")
       val payloadPath = path.resolve("payload")
@@ -105,7 +103,7 @@ object RepositoryMutator:
         name: SecretName,
         payload: RawSecretData,
         meta: RawMetadata): F[Result[RawStoreLocations]] =
-      val path = repoDir.resolve(name)
+      val path = repoDir.resolve(name.asPath)
 
       val metaPath    = path.resolve("meta")
       val payloadPath = path.resolve("payload")
@@ -124,7 +122,7 @@ object RepositoryMutator:
         name: SecretName,
         payload: RawSecretData,
         metadata: RawMetadata): F[Result[RawStoreLocations]] =
-      val path = repoDir.resolve(name)
+      val path = repoDir.resolve(name.asPath)
 
       val metaPath    = path.resolve("meta")
       val payloadPath = path.resolve("payload")
@@ -184,27 +182,27 @@ object RepositoryMutator:
       }
   }
 
+type PackResult[T] = Result[SecretPackage[T]]
+
 trait RepositoryReader[F[_]] derives ApplyK:
-  def loadPayload(secret: SecretPackage[Path]): F[Result[SecretPackage[RawSecretData]]]
-  def loadMeta(secret: SecretPackage[Path]): F[Result[SecretPackage[RawMetadata]]]
+  def loadPayload(secret: SecretPackage[Path]): F[PackResult[RawSecretData]]
+
+  def loadMeta(secret: SecretPackage[Path]): F[PackResult[RawMetadata]]
 
   def loadFully(
-      secret: SecretPackage[
-        RawStoreLocations
-      ]): F[Result[SecretPackage[(RawSecretData, RawMetadata)]]]
+      secret: SecretPackage[RawStoreLocations]): F[PackResult[(RawSecretData, RawMetadata)]]
   def walkTree: F[Result[Node[Branch[SecretPackage[RawStoreLocations]]]]]
 
 object RepositoryReader:
 
-  def make[F[_]: { Async, Logger }](
+  def make[F[_]: { Async }](
       config: RepositoryConfiguration,
       cs: CypherService[F]): RepositoryReader[F] =
     val gitted: RepositoryReader[Mid[F, *]] = Gitted[F](config.repoDir)
     val lcs: RepositoryReader[Mid[F, *]]    = CypheredStorage[F](cs)
     (gitted |+| lcs) attach Impl[F](config.repoDir)
 
-  class CypheredStorage[F[_]: { Async, Logger }](cs: CypherService[F])
-      extends RepositoryReader[Mid[F, *]] {
+  class CypheredStorage[F[_]: { Async }](cs: CypherService[F]) extends RepositoryReader[Mid[F, *]] {
 
     override def loadPayload(
         secret: SecretPackage[Path]): Mid[F, Result[SecretPackage[RawSecretData]]] =
@@ -212,9 +210,9 @@ object RepositoryReader:
         (for
           d <- EitherT(action)
           r <- cs.decrypt(d.payload.byteArray).liftE[RepositoryErr]
-        yield d.copy(payload = RawSecretData.from(r))).value
+        yield d.copy(payload = RawSecretData.fromRaw(r))).value
 
-    override def loadMeta(secret: SecretPackage[Path]): Mid[F, Result[SecretPackage[RawMetadata]]] =
+    override def loadMeta(secret: SecretPackage[Path]): Mid[F, PackResult[RawMetadata]] =
       identity
 
     override def loadFully(
@@ -225,7 +223,7 @@ object RepositoryReader:
         (for
           d <- EitherT(action)
           r <- cs.decrypt(d.payload._1.byteArray).liftE[RepositoryErr]
-        yield d.copy(payload = (RawSecretData.from(r), d.payload._2))).value
+        yield d.copy(payload = (RawSecretData.fromRaw(r), d.payload._2))).value
 
     override def walkTree: Mid[F, Result[Node[Branch[SecretPackage[RawStoreLocations]]]]] =
       identity
@@ -236,17 +234,16 @@ object RepositoryReader:
     private val verifyGitRepo: EitherT[F, RepositoryErr, Unit] =
       GitRepo.openExists(repoDir).use(_.verify).liftE[RepositoryErr]
 
-    override def loadPayload(
-        secret: SecretPackage[Path]): Mid[F, Result[SecretPackage[RawSecretData]]] =
+    override def loadPayload(secret: SecretPackage[Path]): Mid[F, PackResult[RawSecretData]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
-    override def loadMeta(secret: SecretPackage[Path]): Mid[F, Result[SecretPackage[RawMetadata]]] =
+    override def loadMeta(secret: SecretPackage[Path]): Mid[F, PackResult[RawMetadata]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
     override def loadFully(
         secret: SecretPackage[
           RawStoreLocations
-        ]): Mid[F, Result[SecretPackage[(RawSecretData, RawMetadata)]]] =
+        ]): Mid[F, PackResult[(RawSecretData, RawMetadata)]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
     override def walkTree: Mid[F, Result[Node[Branch[SecretPackage[RawStoreLocations]]]]] =
@@ -272,7 +269,7 @@ object RepositoryReader:
       for tree <- blocking(walkFileTree(repoDir, exceptDir))
       yield tree.traverse(v => Id(mapBranch(v))).asRight
 
-    override def loadMeta(secret: SecretPackage[Path]): F[Result[SecretPackage[RawMetadata]]] =
+    override def loadMeta(secret: SecretPackage[Path]): F[PackResult[RawMetadata]] =
       val metaPath = secret.payload
 
       blocking(Files.exists(metaPath)).flatMap { exists =>
@@ -287,13 +284,13 @@ object RepositoryReader:
     override def loadFully(
         secret: SecretPackage[
           RawStoreLocations
-        ]): F[Result[SecretPackage[(RawSecretData, RawMetadata)]]] =
+        ]): F[PackResult[(RawSecretData, RawMetadata)]] =
       for
         p <- loadPayload(secret.map(_.secretData))
         m <- loadMeta(secret.map(_.metadata))
       yield (p, m).mapN((a, b) => SecretPackage(a.name, (a.payload, b.payload)))
 
-    override def loadPayload(secret: SecretPackage[Path]): F[Result[SecretPackage[RawSecretData]]] =
+    override def loadPayload(secret: SecretPackage[Path]): F[PackResult[RawSecretData]] =
       val path = secret.payload
 
       blocking(Files.exists(path)).flatMap { exists =>
@@ -301,7 +298,7 @@ object RepositoryReader:
           RepositoryErr.Corrupted(secret.name).asLeft[SecretPackage[RawSecretData]].pure[F]
         else
           for raw <- blocking(Files.readAllBytes(path))
-          yield SecretPackage(secret.name, RawSecretData.from(raw)).asRight
+          yield SecretPackage(secret.name, RawSecretData.fromRaw(raw)).asRight
       }
 
 end RepositoryReader

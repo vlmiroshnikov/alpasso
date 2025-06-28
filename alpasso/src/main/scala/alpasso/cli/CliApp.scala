@@ -18,22 +18,17 @@ import alpasso.core.model.*
 import alpasso.service.fs.RepositoryConfigReader
 import alpasso.service.fs.model.*
 
-import logstage.{ IzLogger, Level, LogIO }
-
 object CliApp extends IOApp:
 
   override def run(args: List[String]): IO[ExitCode] =
-
-    val logger = IzLogger(levels = Map("org.eclipse.jgit" -> Level.Info))
-
-    given LogIO[IO] = LogIO.fromLogger(logger)
-    // StaticLogRouter.instance.setup(logger.router)
 
     val smgr = SessionManager.make[IO]
     val rmr  = RepositoryConfigReader.make[IO]
 
     given [A: Show]: Show[Option[A]] =
       Show.show[Option[A]](_.fold("empty")(_.show))
+
+    given SensitiveMode = SensitiveMode.Masked
 
     def handle[T: Show](result: Result[T]): IO[ExitCode] =
       result match
@@ -87,11 +82,13 @@ object CliApp extends IOApp:
       case Right(Action.Patch(sn, spOpt, smOpt)) =>
         provideCommand(_.patch(sn, spOpt, smOpt)) >>= handle
 
-      case Right(Action.Filter(where, OutputFormat.Tree)) =>
+      case Right(Action.Filter(where, OutputFormat.Tree, smode)) =>
+        given SensitiveMode = smode
         provideCommand(_.filter(where)) >>= handle
 
-      case Right(Action.Filter(where, OutputFormat.Table)) =>
-        val res = provideCommand(_.filter(where))
+      case Right(Action.Filter(where, OutputFormat.Table, smode)) =>
+        given SensitiveMode = smode
+        val res             = provideCommand(_.filter(where))
         val buildTableView = res
           .nested
           .nested

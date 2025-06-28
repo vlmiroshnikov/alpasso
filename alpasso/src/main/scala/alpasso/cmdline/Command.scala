@@ -7,9 +7,10 @@ import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
 
+import alpasso.cmdline.view.SimpleMetadataView.given
 import alpasso.cmdline.view.{ *, given }
 import alpasso.common.syntax.*
-import alpasso.common.{ Logger, RawPackage, Result, SemVer }
+import alpasso.common.{ Package, Result, SemVer }
 import alpasso.core.model.*
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
@@ -47,12 +48,12 @@ object Err:
     ge => summon[Upcast[Err, RepositoryErr]].upcast(fromGitError(ge)) // todo fix it
 end Err
 
-def bootstrap[F[_]: { Sync, Logger }](
+def bootstrap[F[_]: { Sync }](
     repoDir: Path,
     version: SemVer,
     cypher: CypherAlg): F[Result[StorageView]] =
   val provisioner = RepositoryProvisioner.make(repoDir)
-  val config      = RepositoryMetaConfig(version, cypher)
+  val config      = PersistentModels.RepositoryMetaConfig(version, cypher)
   provisioner.provision(config).liftE[Err].map(_ => StorageView(repoDir, cypher)).value
 
 def historyLog[F[_]: Sync](configuration: RepositoryConfiguration): F[Result[HistoryLogView]] =
@@ -93,7 +94,7 @@ trait Command[F[_]]:
 
 object Command:
 
-  def make[F[_]: { Async, Logger }](config: RepositoryConfiguration): Command[F] =
+  def make[F[_]: { Async }](config: RepositoryConfiguration): Command[F] =
     val cs = config.cypherAlg match
       case CypherAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
 
@@ -101,20 +102,20 @@ object Command:
     val mutator = RepositoryMutator.make(config)
     Impl[F](cs, reader, mutator)
 
-  private class Impl[F[_]: { Async, Logger }](
+  private class Impl[F[_]: { Async }](
       cs: CypherService[F],
       reader: RepositoryReader[F],
       mutator: RepositoryMutator[F])
       extends Command[F]:
 
     override def filter(filter: SecretFilter): F[Result[Option[Node[Branch[SecretView]]]]] =
-      def predicate(p: RawPackage): Boolean =
+      def predicate(p: Package): Boolean =
         filter match
-          case SecretFilter.Grep(pattern) => p.name.contains(pattern)
+          case SecretFilter.Grep(pattern) => p.name.asPath.toString.contains(pattern)
           case SecretFilter.Empty         => true
 
       def load(s: SecretPackage[RawStoreLocations]) =
-        reader.loadFully(s).liftE[Err]
+        reader.loadFully(s).liftE[Err].nested.map((d, m) => (d.into(), m.into())).value
 
       val result = for
         rawTree <- reader.walkTree.liftE[Err]
@@ -131,8 +132,8 @@ object Command:
       val result =
         for
           data      <- cs.encrypt(payload.rawData).liftE[Err]
-          locations <- mutator.create(name, RawSecretData.from(data), rmd).liftE[Err]
-        yield SecretView(name, None, meta)
+          locations <- mutator.create(name, RawSecretData.fromRaw(data), rmd).liftE[Err]
+        yield SecretView(name, None, meta.map(_.into()))
 
       result.value
 
@@ -170,7 +171,7 @@ object Command:
           rmd = meta.map(RawMetadata.from).getOrElse(toUpdate.payload._2)
 
           sec       <- cs.encrypt(rsd).liftE[Err]
-          locations <- mutator.update(name, RawSecretData.from(sec), rmd).liftE[Err]
+          locations <- mutator.update(name, RawSecretData.fromRaw(sec), rmd).liftE[Err]
         yield SecretView(name, None, None)
 
       result.value

@@ -8,6 +8,7 @@ import cats.syntax.all.*
 import alpasso.cmdline.view.{ OutputFormat, SecretFilter }
 import alpasso.core.model.{ SecretMetadata, SecretName, SecretPayload, SensitiveMode }
 import alpasso.service.cypher.CypherAlg
+import alpasso.service.cypher.Recipient
 
 import com.monovore.decline.*
 
@@ -31,11 +32,13 @@ enum Action:
 
 object ArgParser:
 
+  given Argument[Recipient] = Argument.readString.map(Recipient.apply)
+
   val repos: Opts[Action] = Opts.subcommand("repo", "Repositories ops") {
 
     val init = Opts.subcommand("init", "Init new repository") {
       val path = Opts.option[Path]("path", "Repository path", "p")
-      val gpg  = Opts.option[String]("gpg-fingerprint", "GPG fingerprint").map(CypherAlg.Gpg(_))
+      val gpg  = Opts.option[Recipient]("gpg-fingerprint", "GPG fingerprint").map(CypherAlg.Gpg(_))
 
       (path, gpg).mapN(RepoOp.Init.apply)
     }

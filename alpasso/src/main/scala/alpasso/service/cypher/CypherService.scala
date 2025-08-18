@@ -14,15 +14,13 @@ enum CypherError:
 
 type Result[A] = Either[CypherError, A]
 
-opaque type Recipient <: String = String
-
 trait CypherService[F[_]]:
   def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]]
   def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]]
 
 object CypherService:
 
-  private class GpgImpl[F[_]: Sync as S](fg: String) extends CypherService[F]:
+  private class GpgImpl[F[_]: Sync as S](fg: Recipient) extends CypherService[F]:
 
     import S.blocking
 
@@ -57,12 +55,12 @@ object CypherService:
     override def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]] = raw.asRight.pure
     override def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]] = raw.asRight.pure
 
-  def gpg[F[_]: { Sync }](fg: String): CypherService[F] = GpgImpl[F](fg)
+  def gpg[F[_]: { Sync }](fg: Recipient): CypherService[F] = GpgImpl[F](fg)
 
 @main
 def main(): Unit = {
 
-  val fg = "64695F7D212F979D3553AFC5E0D6CE10FBEB0423"
+  val fg: Recipient = Recipient("64695F7D212F979D3553AFC5E0D6CE10FBEB0423")
 
   val bis = ByteArrayInputStream("hello 123123123#$!!#!@@!#".getBytes)
   val bos = ByteArrayOutputStream()

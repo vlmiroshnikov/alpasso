@@ -2,7 +2,7 @@ import sbt.*
 import sbt.Keys.*
 
 object Versions {
-  val scala      = "3.7.2"
+  val scala      = "3.7.3"
   val cats       = "2.13.0"
   val catsEffect = "3.6.1"
   val circe      = "0.14.13"

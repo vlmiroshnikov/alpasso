@@ -45,10 +45,10 @@ object RepositoryProvisioner:
     val alg = MetaProvisioner(repoDir)
 
     val gitted: Provisioner[Mid[F, *]] = GitProvisioner[F](repoDir)
-    // val logged: Provisioner[Mid[F, *]] = LoggingProvisioner[F]
+    val logged: Provisioner[Mid[F, *]] = LoggingProvisioner[F]
     val cs: Provisioner[Mid[F, *]] = CypherProvisioner[F]
 
-    (cs |+| gitted) attach alg
+    (cs |+| gitted |+| logged) attach alg
 
   class CypherProvisioner[F[_]: { Sync }] extends Provisioner[Mid[F, *]] {
 
@@ -97,12 +97,12 @@ object RepositoryProvisioner:
     private val fullPath = repoDir.resolve(repoMetadataFile)
 
     override def provision(config: RepositoryMetaConfig): F[Either[ProvisionErr, Unit]] =
-      blocking(Files.exists(repoDir)).flatMap { exists =>
-        if exists then ProvisionErr.AlreadyExists(repoDir).asLeft.pure[F]
+      blocking(Files.exists(fullPath)).flatMap { exists =>
+        if exists then ProvisionErr.AlreadyExists(fullPath).asLeft.pure[F]
         else {
           for
-            _ <- blocking(Files.createDirectory(repoDir))
-            _ <- blocking(Files.writeString(fullPath, config.asJson.noSpaces, CREATE, WRITE))
+           // _ <- blocking(Files.createDirectory(repoDir))
+            _ <- blocking(Files.writeString(fullPath, config.asJson.noSpaces, CREATE_NEW, WRITE))
           yield ().asRight
         }
       }

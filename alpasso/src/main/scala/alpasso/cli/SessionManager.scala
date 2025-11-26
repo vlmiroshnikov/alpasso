@@ -22,25 +22,25 @@ trait SessionManager[F[_]]:
 object SessionManager:
   import models.*
 
-  def make[F[_]: Sync]: SessionManager[F] = Impl[F]
+  val empty = SessionData(current = None, sessions = Nil)
 
-  class Impl[F[_]: Sync as S] extends SessionManager[F]:
-    import S.blocking
-
-    private def sessionDir = {
+  def make[F[_]: Sync]: SessionManager[F] =
+    val sessionDir = {
       val str = System.getProperty("user.home")
       Path.of(str).toAbsolutePath.resolve(".alpasso")
     }
+    Impl[F](sessionDir)
 
-    private val sessionFile = sessionDir.resolve("sessions")
+  class Impl[F[_]: Sync as S](sessionDir: Path) extends SessionManager[F]:
+    import S.blocking
 
-    val empty = SessionData(current = None, sessions = Nil)
+    val sessionFile = sessionDir.resolve("sessions")
 
-    def readData(): F[Option[SessionData]] =
+    private def readData(): F[Option[SessionData]] =
       if !Files.exists(sessionFile) then
         for
-          _ <- blocking(Files.createDirectory(sessionDir))
-          _ <- write(empty)
+          _ <- blocking(Files.createDirectory(sessionDir)).whenA(Files.notExists(sessionDir))
+          _ <- save(empty)
         yield None
       else
         for
@@ -48,13 +48,11 @@ object SessionManager:
           ctx <- blocking(parser.parse(raw).flatMap(_.as[SessionData]))
         yield ctx.toOption
 
-    def write(data: SessionData): F[Unit] =
-      blocking(
-        Files.writeString(sessionFile, data.asJson.spaces2, CREATE, TRUNCATE_EXISTING, WRITE)
-      )
+    private def save(data: SessionData): F[Unit] =
+      blocking(Files.writeString(sessionFile, data.asJson.spaces2, CREATE, TRUNCATE_EXISTING, WRITE))
 
     def modify(f: SessionData => SessionData): F[Unit] =
-      OptionT(readData()).cata(f(empty), f) >>= write
+      OptionT(readData()).cata(f(empty), f) >>= save
 
     override def listAll: F[List[Session]] =
       readData().map(_.map(_.sessions).getOrElse(Nil))

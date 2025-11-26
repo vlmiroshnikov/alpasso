@@ -15,13 +15,7 @@ object SecretName:
   extension (s: SecretName)
 
     def shortName: String =
-      Spliterators
-        .iterator(s.spliterator())
-        .asScala
-        .toList
-        .lastOption
-        .map(_.toString())
-        .getOrElse("")
+      Option(s.getFileName).map(_.toString).getOrElse("")
 
     def asPath: Path = s
 

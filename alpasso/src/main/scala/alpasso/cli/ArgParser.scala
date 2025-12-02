@@ -102,7 +102,7 @@ object ArgParser:
       .map(s => OutputFormat.withNameInvariant(s).getOrElse(OutputFormat.Tree))
       .orNone
 
-    val smode = Opts.flag("unmasked", "Unmasked sensitive data in console output").orFalse
+    val smode = Opts.flag("unmasked", "Show sensitive data in console output").orFalse
 
     (grep, output, smode).mapN((v, o, m) =>
       Action.Filter(v.getOrElse(SecretFilter.Empty),

@@ -6,13 +6,13 @@ import cats.*
 import cats.syntax.all.*
 
 enum Branch[+A]:
-  case Empty(path: Path)
-  case Solid(path: Path, data: A)
+  case Node(path: Path)
+  case Leaf(path: Path, data: A)
 
   def traverse[F[_]: Applicative as F, B](f: A => F[B]): F[Branch[B]] =
     this match
-      case Solid(path, a) => F.map(f(a))(Solid.apply(path, _))
-      case Empty(path)    => F.pure(Empty.apply(path))
+      case Leaf(path, a) => F.map(f(a))(Leaf.apply(path, _))
+      case Node(path)    => F.pure(Node.apply(path))
 
 object Branch:
 
@@ -20,24 +20,24 @@ object Branch:
 
     def toEmpty: Branch[A] =
       b match
-        case a @ Empty(_)   => a
-        case Solid(path, _) => Empty(path)
+        case a @ Node(_)   => a
+        case Leaf(path, _) => Node(path)
 
     def fold[B](empty: => B, solid: A => B): B =
       b match
-        case Branch.Empty(_)       => empty
-        case Branch.Solid(_, data) => solid(data)
+        case Branch.Node(_)       => empty
+        case Branch.Leaf(_, data) => solid(data)
 
     def toOption: Option[A] =
       fold(none[A], identity(_).some)
 
   given [A: Show]: Show[Branch[A]] = Show.show:
-    case Branch.Empty(path)       => path.getFileName.toString
-    case Branch.Solid(path, data) => data.show
+    case Branch.Node(path)       => path.getFileName.toString
+    case Branch.Leaf(path, data) => data.show
 
   given Functor[Branch] with
 
     override def map[A, B](fa: Branch[A])(f: A => B): Branch[B] =
       fa match
-        case Empty(dir)        => Branch.Empty(dir)
-        case Solid(path, data) => Branch.Solid(path, f(data))
+        case Node(dir)        => Branch.Node(dir)
+        case Leaf(path, data) => Branch.Leaf(path, f(data))

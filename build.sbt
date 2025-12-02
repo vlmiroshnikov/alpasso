@@ -7,7 +7,7 @@ lazy val alpasso = project
   .enablePlugins(NativeImagePlugin)
   .enablePlugins(BuildInfoPlugin)
   .settings(
-    Compile / mainClass             := Some("alpasso.cli.CliApp"),
+    Compile / mainClass             := Some("alpasso.cli.AlpassoApp"),
     Compile / discoveredMainClasses := Seq()
   )
   .settings(

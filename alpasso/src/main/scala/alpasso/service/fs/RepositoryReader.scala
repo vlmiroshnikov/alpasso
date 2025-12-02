@@ -256,13 +256,13 @@ object RepositoryReader:
 
     override def walkTree: F[Result[Node[Branch[SecretPackage[RawStoreLocations]]]]] =
       def mapBranch: Entry => Branch[SecretPackage[RawStoreLocations]] =
-        case Entry(dir, Chain.nil) => Branch.Empty(dir)
+        case Entry(dir, Chain.nil) => Branch.Node(dir)
         case Entry(dir, files) =>
           (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
             case (Some(meta), Some(payload)) =>
               val name = SecretName.of(repoDir.relativize(dir).toString).toOption.get // todo
-              Branch.Solid(dir, SecretPackage(name, RawStoreLocations(payload, meta)))
-            case _ => Branch.Empty(dir)
+              Branch.Leaf(dir, SecretPackage(name, RawStoreLocations(payload, meta)))
+            case _ => Branch.Node(dir)
 
       val exceptDir: Path => Boolean = p => p.endsWith(".git") || p.endsWith(".alpasso")
 
@@ -355,18 +355,18 @@ def cutTree[A](root: Node[Branch[A]], f: A => Boolean): Option[Node[Branch[A]]] 
   filter_(marked)
 
 def mapBranch: Entry => Branch[SecretPackage[RawStoreLocations]] =
-  case Entry(dir, Chain.nil) => Branch.Empty(dir)
+  case Entry(dir, Chain.nil) => Branch.Node(dir)
   case Entry(dir, files) =>
     (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
       case (Some(meta), Some(payload)) =>
         Branch
-          .Solid(
+          .Leaf(
             dir,
             SecretPackage(SecretName.of(dir.toString).toOption.get,
                           RawStoreLocations(payload, meta)
             )
           ) // todo
-      case _ => Branch.Empty(dir)
+      case _ => Branch.Node(dir)
 
 @main
 def main(): Unit =

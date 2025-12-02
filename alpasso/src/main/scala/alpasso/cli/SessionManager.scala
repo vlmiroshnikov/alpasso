@@ -51,7 +51,7 @@ object SessionManager:
     private def save(data: SessionData): F[Unit] =
       blocking(Files.writeString(sessionFile, data.asJson.spaces2, CREATE, TRUNCATE_EXISTING, WRITE))
 
-    def modify(f: SessionData => SessionData): F[Unit] =
+    private def modify(f: SessionData => SessionData): F[Unit] =
       OptionT(readData()).cata(f(empty), f) >>= save
 
     override def listAll: F[List[Session]] =

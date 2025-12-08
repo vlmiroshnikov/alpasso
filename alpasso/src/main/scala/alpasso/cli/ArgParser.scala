@@ -6,7 +6,7 @@ import cats.*
 import cats.syntax.all.*
 
 import alpasso.cmdline.view.{ OutputFormat, SecretFilter }
-import alpasso.core.model.{ SecretMetadata, SecretName, SecretPayload, SensitiveMode }
+import alpasso.domain.{ SecretMetadata, SecretName, SecretPayload, SensitiveMode }
 import alpasso.service.cypher.CypherAlg
 import alpasso.service.cypher.Recipient
 
@@ -22,6 +22,7 @@ enum RepoOp:
   case Switch(index: Int)
   case Log
   case RemoteOps(ops: RemoteOp)
+  // todo doctor
 
 enum Action:
   case Repo(ops: RepoOp)
@@ -32,7 +33,7 @@ enum Action:
 
 object ArgParser:
 
-  given Argument[Recipient] = Argument.readString.map(Recipient.apply)
+  given Argument[Recipient] = Argument.readString.map(Recipient.hex)
 
   val repos: Opts[Action] = Opts.subcommand("repo", "Repository operations") {
 

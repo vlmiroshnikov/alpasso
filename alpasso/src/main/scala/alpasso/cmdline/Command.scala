@@ -12,6 +12,7 @@ import alpasso.cmdline.view.{ *, given }
 import alpasso.common.syntax.*
 import alpasso.common.{ Package, Result, SemVer }
 import alpasso.core.model.*
+import alpasso.domain.{ Secret, SecretMetadata, SecretName, SecretPayload }
 import alpasso.service.cypher.*
 import alpasso.service.fs.*
 import alpasso.service.fs.RepoMetaErr.{ InvalidFormat, NotInitialized }
@@ -58,7 +59,7 @@ def bootstrap[F[_]: { Sync }](
 
 def historyLog[F[_]: Sync](configuration: RepositoryConfiguration): F[Result[HistoryLogView]] =
   GitRepo.openExists(configuration.repoDir).use { git =>
-    git.history().nested.map(v => HistoryLogView.from(v.commits)).value.liftE[Err].value
+    git.history().liftE[Err].map(v => HistoryLogView.from(v.commits)).value
   }
 
 def setupRemote[F[_]: Sync](
@@ -114,7 +115,7 @@ object Command:
           case SecretFilter.Grep(pattern) => p.name.asPath.toString.contains(pattern)
           case SecretFilter.Empty         => true
 
-      def load(s: SecretPackage[RawStoreLocations]) =
+      def load(s: Secret[Locations]) =
         reader.loadFully(s).liftE[Err].nested.map((d, m) => (d.into(), m.into())).value
 
       val result = for
@@ -123,6 +124,10 @@ object Command:
       yield cutTree(tree, predicate).map(_.traverse(b => Id(b.map(_.into()))))
 
       result.value
+
+    private def lookup(name: SecretName): EitherT[F, Err, Option[Secret[Locations]]] =
+      for catalog <- reader.walkTree.liftE[Err]
+      yield catalog.find(_.fold(false, _.name == name)).flatMap(_.toOption)
 
     override def create(
         name: SecretName,
@@ -139,14 +144,9 @@ object Command:
 
     override def remove(name: SecretName): F[Result[SecretView]] =
       val result = for
-        catalog <- reader.walkTree.liftE[Err]
-        exists <- catalog
-                    .find(_.fold(false, _.name == name))
-                    .flatMap(_.toOption)
-                    .toRight(RepositoryErr.NotFound(name))
-                    .pure[F]
-                    .liftE[Err]
-        _ <- mutator.remove(exists.name).liftE[Err]
+        exists <- lookup(name)
+        _      <- exists.toRight(RepositoryErr.NotFound(name)).pure[F].liftE[Err]
+        _      <- mutator.remove(name).liftE[Err]
       yield SecretView(name, None, None)
 
       result.value
@@ -157,21 +157,16 @@ object Command:
         meta: Option[SecretMetadata]): F[Result[SecretView]] =
       val result =
         for
-          catalog <- reader.walkTree.liftE[Err]
-          exists <- catalog
-                      .find(_.fold(false, _.name == name))
-                      .flatMap(_.toOption)
-                      .toRight(RepositoryErr.NotFound(name))
-                      .pure[F]
-                      .liftE[Err]
+          exists    <- lookup(name)
+          locations <- exists.toRight(RepositoryErr.NotFound(name)).pure[F].liftE[Err]
 
-          toUpdate <- reader.loadFully(exists).liftE[Err]
+          toUpdate <- reader.loadFully(locations).liftE[Err]
 
           rsd = payload.map(_.rawData).getOrElse(toUpdate.payload._1.byteArray)
           rmd = meta.map(RawMetadata.from).getOrElse(toUpdate.payload._2)
 
-          sec       <- cs.encrypt(rsd).liftE[Err]
-          locations <- mutator.update(name, RawSecretData.fromRaw(sec), rmd).liftE[Err]
+          sec <- cs.encrypt(rsd).liftE[Err]
+          _   <- mutator.update(name, RawSecretData.fromRaw(sec), rmd).liftE[Err]
         yield SecretView(name, None, None)
 
       result.value

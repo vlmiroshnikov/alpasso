@@ -13,6 +13,7 @@ import alpasso.cmdline.view.given
 import alpasso.common.*
 import alpasso.common.syntax.*
 import alpasso.core.model.*
+import alpasso.domain.{ SecretPayload, SensitiveMode }
 import alpasso.service.fs.RepositoryConfigReader
 import alpasso.service.fs.model.*
 

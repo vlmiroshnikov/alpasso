@@ -1,12 +1,11 @@
 package alpasso.common
 
 import alpasso.cmdline.Err
-import alpasso.core.model.{ SecretMetadata, SecretPackage, SecretPayload }
-import alpasso.service.fs.model.{ RawMetadata, RawSecretData }
+import alpasso.domain.{ Secret, SecretMetadata, SecretPayload }
 
 type Result[A] = Either[Err, A]
 
-type Package = SecretPackage[(SecretPayload, SecretMetadata)]
+type Package = Secret[(SecretPayload, SecretMetadata)]
 
 trait Converter[-From, +To] extends (From => To):
   def apply(x: From): To

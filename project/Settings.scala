@@ -2,7 +2,7 @@ import sbt.*
 import sbt.Keys.*
 
 object Versions {
-  val scala      = "3.7.3"
+  val scala      = "3.7.4"
   val cats       = "2.13.0"
   val catsEffect = "3.6.1"
   val circe      = "0.14.13"
@@ -26,7 +26,7 @@ object Deps {
   lazy val catsEffect = Seq("org.typelevel" %% "cats-effect").map(_ % Versions.catsEffect)
   lazy val tagless    = Seq("org.typelevel" %% "cats-tagless-core" % "0.16.3")
   lazy val glass      = Seq("tf.tofu" %% "glass-core" % "0.3.0")
-  lazy val tofu       = Seq("tf.tofu" %% "tofu-core-higher-kind" % "0.13.7")
+  lazy val tofu       = Seq("tf.tofu" %% "tofu-core-higher-kind" % "0.14.0")
 
   lazy val infra      = cats ++ catsEffect ++ tagless ++ glass ++ tofu
 
@@ -35,5 +35,5 @@ object Deps {
   lazy val circe     = Seq("io.circe" %% "circe-core", "io.circe" %% "circe-parser").map(_ % Versions.circe)
   lazy val decline   = Seq("com.monovore" %% "decline" % "2.5.0")
   lazy val logger    = Seq("org.slf4j" % "slf4j-nop" % "2.0.17")
-  lazy val munit     = Seq("org.scalameta" %% "munit" % "1.1.1" % Test)
+  lazy val munit     = Seq("org.scalameta" %% "munit" % "1.2.1" % Test)
 }

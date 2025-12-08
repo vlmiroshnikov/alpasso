@@ -1,10 +1,9 @@
 package alpasso.core.model
 
+import alpasso.domain.SecretName
 import java.nio.file.Path
 
 import cats.syntax.show.*
-
-import alpasso.core.model.SecretName
 
 import munit.FunSuite
 

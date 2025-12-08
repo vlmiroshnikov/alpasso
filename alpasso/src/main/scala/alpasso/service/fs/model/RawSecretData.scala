@@ -3,7 +3,7 @@ package alpasso.service.fs.model
 import cats.Show
 
 import alpasso.common.Converter
-import alpasso.core.model.SecretPayload
+import alpasso.domain.SecretPayload
 
 opaque type RawSecretData = Array[Byte]
 

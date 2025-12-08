@@ -7,7 +7,7 @@ import cats.syntax.all.*
 
 import alpasso.cli.Session
 import alpasso.common.Converter
-import alpasso.core.model.SensitiveMode
+import alpasso.domain.SensitiveMode
 
 case class TableView(rows: List[SecretView])
 

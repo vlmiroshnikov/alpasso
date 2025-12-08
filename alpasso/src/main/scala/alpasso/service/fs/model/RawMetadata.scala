@@ -5,6 +5,7 @@ import cats.syntax.all.*
 
 import alpasso.common.Converter
 import alpasso.core.model.*
+import alpasso.domain.SecretMetadata
 
 import io.circe.*
 import io.circe.syntax.*

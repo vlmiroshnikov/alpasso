@@ -8,10 +8,10 @@ import io.circe.syntax.*
 opaque type Recipient <: String = String
 
 object Recipient:
-  def apply(value: String): Recipient = value
+  def hex(value: String): Recipient = value
 
   given Encoder[Recipient] = Encoder.encodeString.contramap(identity)
-  given Decoder[Recipient] = Decoder.decodeString.map(Recipient.apply)
+  given Decoder[Recipient] = Decoder.decodeString.map(Recipient.hex)
 
 enum CypherAlg:
   case Gpg(recipient: Recipient)
@@ -29,5 +29,5 @@ object CypherAlg:
       t  <- hcursor.get[String]("type")
       fg <- hcursor.get[Recipient]("fingerprint")
     yield t match
-      case "gpg" => CypherAlg.Gpg(fg)
+      case "gpg" => CypherAlg.Gpg(fg) // todo fix match
   }

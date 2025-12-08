@@ -7,7 +7,7 @@ import cats.syntax.show.*
 
 import alpasso.cmdline.*
 import alpasso.common.Converter
-import alpasso.core.model.SecretName.given
+import alpasso.domain.SecretName.given
 import alpasso.service.fs.{ ProvisionErr, RepositoryErr }
 
 case class ErrorView(error: String, suggest: Option[String] = None)

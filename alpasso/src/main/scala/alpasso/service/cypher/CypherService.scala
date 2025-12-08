@@ -55,12 +55,12 @@ object CypherService:
     override def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]] = raw.asRight.pure
     override def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]] = raw.asRight.pure
 
-  def gpg[F[_]: { Sync }](fg: Recipient): CypherService[F] = GpgImpl[F](fg)
+  def gpg[F[_]: Sync](fg: Recipient): CypherService[F] = GpgImpl[F](fg)
 
 @main
 def main(): Unit = {
 
-  val fg: Recipient = Recipient("64695F7D212F979D3553AFC5E0D6CE10FBEB0423")
+  val fg: Recipient = Recipient.hex("1287075CBDF42BC4379E4EC61839D663CCE50A32")
 
   val bis = ByteArrayInputStream("hello 123123123#$!!#!@@!#".getBytes)
   val bos = ByteArrayOutputStream()

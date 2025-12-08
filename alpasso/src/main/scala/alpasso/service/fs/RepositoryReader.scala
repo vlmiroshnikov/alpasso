@@ -22,7 +22,7 @@ import cats.tagless.*
 
 import alpasso.common.syntax.*
 import alpasso.core.model.*
-import alpasso.service.cypher
+import alpasso.domain.{ Secret, SecretName }
 import alpasso.service.cypher.{ CypherError, CypherService }
 import alpasso.service.fs.model.*
 import alpasso.service.git.{ GitError, GitRepo }
@@ -54,144 +54,13 @@ object RepositoryErr:
       case GitError.SyncErr         => RepositoryErr.Undefiled
 
 type Result[+T] = Either[RepositoryErr, T]
-
-trait RepositoryMutator[F[_]] derives ApplyK:
-
-  def create(
-      name: SecretName,
-      payload: RawSecretData,
-      meta: RawMetadata): F[Result[RawStoreLocations]]
-
-  def update(
-      name: SecretName,
-      payload: RawSecretData,
-      meta: RawMetadata): F[Result[RawStoreLocations]]
-  def remove(name: SecretName): F[Result[RawStoreLocations]]
-
-object RepositoryMutator:
-
-  def make[F[_]: { Async }](config: RepositoryConfiguration): RepositoryMutator[F] =
-    val gitted: RepositoryMutator[Mid[F, *]] = Gitted[F](config.repoDir)
-    gitted attach Impl[F](config.repoDir)
-
-  class Impl[F[_]: { Sync as F }](repoDir: Path) extends RepositoryMutator[F] {
-
-    import F.blocking
-    import Files.*
-    import StandardOpenOption.*
-
-    val CreateOps: List[OpenOption] = List(CREATE_NEW, WRITE)
-    val UpdateOps: List[OpenOption] = List(CREATE, TRUNCATE_EXISTING, WRITE)
-
-    override def remove(name: SecretName): F[Result[RawStoreLocations]] =
-      val path = repoDir.resolve(name.asPath)
-
-      val metaPath    = path.resolve("meta")
-      val payloadPath = path.resolve("payload")
-
-      blocking(exists(payloadPath)).flatMap { rootExists =>
-        if !rootExists then RepositoryErr.NotFound(name).asLeft.pure[F]
-        else
-          for
-            _ <- blocking(Files.deleteIfExists(metaPath))
-            _ <- blocking(Files.deleteIfExists(payloadPath))
-            _ <- blocking(Files.deleteIfExists(path)).whenA(Files.list(path).count() == 0)
-          yield RawStoreLocations(payloadPath, metaPath).asRight
-      }
-
-    override def create(
-        name: SecretName,
-        payload: RawSecretData,
-        meta: RawMetadata): F[Result[RawStoreLocations]] =
-      val path = repoDir.resolve(name.asPath)
-
-      val metaPath    = path.resolve("meta")
-      val payloadPath = path.resolve("payload")
-
-      blocking(exists(path) && exists(payloadPath)).flatMap { rootExists =>
-        if rootExists then RepositoryErr.AlreadyExists(name).asLeft.pure[F]
-        else
-          for
-            _ <- blocking(createDirectories(path))
-            _ <- blocking(write(payloadPath, payload.byteArray, CreateOps*))
-            _ <- blocking(writeString(metaPath, meta.rawString, CreateOps*))
-          yield RawStoreLocations(payloadPath, metaPath).asRight
-      }
-
-    override def update(
-        name: SecretName,
-        payload: RawSecretData,
-        metadata: RawMetadata): F[Result[RawStoreLocations]] =
-      val path = repoDir.resolve(name.asPath)
-
-      val metaPath    = path.resolve("meta")
-      val payloadPath = path.resolve("payload")
-
-      blocking(exists(path) && exists(metaPath)).flatMap { exists =>
-        if !exists then RepositoryErr.Corrupted(name).asLeft.pure[F]
-        else
-          for
-            _ <- blocking(write(payloadPath, payload.byteArray, UpdateOps*))
-            _ <- blocking(writeString(metaPath, metadata.rawString, UpdateOps*))
-          yield RawStoreLocations(payloadPath, metaPath).asRight
-      }
-  }
-
-  class Gitted[F[_]: Sync](repoDir: Path) extends RepositoryMutator[Mid[F, *]] {
-
-    override def create(
-        name: SecretName,
-        payload: RawSecretData,
-        meta: RawMetadata): Mid[F, Result[RawStoreLocations]] =
-      action => {
-        GitRepo.openExists(repoDir).use { git =>
-          val commitMsg = s"Add secret [$name]"
-          (for
-            locations <- EitherT(action)
-            files = NonEmptyList.of(locations.secretData, locations.metadata)
-            _ <- git.commitFiles(files, commitMsg).liftE[RepositoryErr]
-          yield locations).value
-        }
-      }
-
-    override def update(
-        name: SecretName,
-        payload: RawSecretData,
-        meta: RawMetadata): Mid[F, Result[RawStoreLocations]] =
-      action => {
-        GitRepo.openExists(repoDir).use { git =>
-          val commitMsg = s"Update secret [$name]"
-          (for
-            locations <- EitherT(action)
-            files = NonEmptyList.of(locations.secretData, locations.metadata)
-            _ <- git.commitFiles(files, commitMsg).liftE[RepositoryErr]
-          yield locations).value
-        }
-      }
-
-    override def remove(name: SecretName): Mid[F, Result[RawStoreLocations]] =
-      action => {
-        GitRepo.openExists(repoDir).use { git =>
-          val commitMsg = s"Remove secret [$name]"
-          (for
-            locations <- EitherT(action)
-            files = NonEmptyList.of(locations.secretData, locations.metadata)
-            _ <- git.removeFiles(files, commitMsg).liftE[RepositoryErr]
-          yield locations).value
-        }
-      }
-  }
-
-type PackResult[T] = Result[SecretPackage[T]]
+type PackResult[T] = Result[Secret[T]]
 
 trait RepositoryReader[F[_]] derives ApplyK:
-  def loadPayload(secret: SecretPackage[Path]): F[PackResult[RawSecretData]]
-
-  def loadMeta(secret: SecretPackage[Path]): F[PackResult[RawMetadata]]
-
-  def loadFully(
-      secret: SecretPackage[RawStoreLocations]): F[PackResult[(RawSecretData, RawMetadata)]]
-  def walkTree: F[Result[Node[Branch[SecretPackage[RawStoreLocations]]]]]
+  def loadPayload(secret: Secret[Path]): F[PackResult[RawSecretData]]
+  def loadMeta(secret: Secret[Path]): F[PackResult[RawMetadata]]
+  def loadFully(secret: Secret[Locations]): F[PackResult[(RawSecretData, RawMetadata)]]
+  def walkTree: F[Result[Node[Branch[Secret[Locations]]]]]
 
 object RepositoryReader:
 
@@ -205,27 +74,27 @@ object RepositoryReader:
   class CypheredStorage[F[_]: { Async }](cs: CypherService[F]) extends RepositoryReader[Mid[F, *]] {
 
     override def loadPayload(
-        secret: SecretPackage[Path]): Mid[F, Result[SecretPackage[RawSecretData]]] =
+        secret: Secret[Path]): Mid[F, Result[Secret[RawSecretData]]] =
       action =>
         (for
           d <- EitherT(action)
           r <- cs.decrypt(d.payload.byteArray).liftE[RepositoryErr]
         yield d.copy(payload = RawSecretData.fromRaw(r))).value
 
-    override def loadMeta(secret: SecretPackage[Path]): Mid[F, PackResult[RawMetadata]] =
+    override def loadMeta(secret: Secret[Path]): Mid[F, PackResult[RawMetadata]] =
       identity
 
     override def loadFully(
-        secret: SecretPackage[
-          RawStoreLocations
-        ]): Mid[F, Result[SecretPackage[(RawSecretData, RawMetadata)]]] =
+        secret: Secret[
+          Locations
+        ]): Mid[F, Result[Secret[(RawSecretData, RawMetadata)]]] =
       action =>
         (for
           d <- EitherT(action)
           r <- cs.decrypt(d.payload._1.byteArray).liftE[RepositoryErr]
         yield d.copy(payload = (RawSecretData.fromRaw(r), d.payload._2))).value
 
-    override def walkTree: Mid[F, Result[Node[Branch[SecretPackage[RawStoreLocations]]]]] =
+    override def walkTree: Mid[F, Result[Node[Branch[Secret[Locations]]]]] =
       identity
   }
 
@@ -234,19 +103,19 @@ object RepositoryReader:
     private val verifyGitRepo: EitherT[F, RepositoryErr, Unit] =
       GitRepo.openExists(repoDir).use(_.verify).liftE[RepositoryErr]
 
-    override def loadPayload(secret: SecretPackage[Path]): Mid[F, PackResult[RawSecretData]] =
+    override def loadPayload(secret: Secret[Path]): Mid[F, PackResult[RawSecretData]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
-    override def loadMeta(secret: SecretPackage[Path]): Mid[F, PackResult[RawMetadata]] =
+    override def loadMeta(secret: Secret[Path]): Mid[F, PackResult[RawMetadata]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
     override def loadFully(
-        secret: SecretPackage[
-          RawStoreLocations
+        secret: Secret[
+          Locations
         ]): Mid[F, PackResult[(RawSecretData, RawMetadata)]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
-    override def walkTree: Mid[F, Result[Node[Branch[SecretPackage[RawStoreLocations]]]]] =
+    override def walkTree: Mid[F, Result[Node[Branch[Secret[Locations]]]]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
   }
@@ -254,14 +123,14 @@ object RepositoryReader:
   class Impl[F[_]: Sync as F](repoDir: Path) extends RepositoryReader[F]:
     import F.blocking
 
-    override def walkTree: F[Result[Node[Branch[SecretPackage[RawStoreLocations]]]]] =
-      def mapBranch: Entry => Branch[SecretPackage[RawStoreLocations]] =
+    override def walkTree: F[Result[Node[Branch[Secret[Locations]]]]] =
+      def mapBranch: Entry => Branch[Secret[Locations]] =
         case Entry(dir, Chain.nil) => Branch.Node(dir)
         case Entry(dir, files) =>
           (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
             case (Some(meta), Some(payload)) =>
               val name = SecretName.of(repoDir.relativize(dir).toString).toOption.get // todo
-              Branch.Leaf(dir, SecretPackage(name, RawStoreLocations(payload, meta)))
+              Branch.Leaf(dir, Secret(name, Locations(payload, meta)))
             case _ => Branch.Node(dir)
 
       val exceptDir: Path => Boolean = p => p.endsWith(".git") || p.endsWith(".alpasso")
@@ -269,7 +138,7 @@ object RepositoryReader:
       for tree <- blocking(walkFileTree(repoDir, exceptDir))
       yield tree.traverse(v => Id(mapBranch(v))).asRight
 
-    override def loadMeta(secret: SecretPackage[Path]): F[PackResult[RawMetadata]] =
+    override def loadMeta(secret: Secret[Path]): F[PackResult[RawMetadata]] =
       val metaPath = secret.payload
 
       blocking(Files.exists(metaPath)).flatMap { exists =>
@@ -278,27 +147,23 @@ object RepositoryReader:
           for raw <- blocking(Files.readString(metaPath))
           yield RawMetadata
             .fromString(raw)
-            .bimap(_ => RepositoryErr.Corrupted(secret.name), SecretPackage(secret.name, _))
+            .bimap(_ => RepositoryErr.Corrupted(secret.name), Secret(secret.name, _))
       }
 
-    override def loadFully(
-        secret: SecretPackage[
-          RawStoreLocations
-        ]): F[PackResult[(RawSecretData, RawMetadata)]] =
+    override def loadFully(secret: Secret[Locations]): F[PackResult[(RawSecretData, RawMetadata)]] =
       for
         p <- loadPayload(secret.map(_.secretData))
         m <- loadMeta(secret.map(_.metadata))
-      yield (p, m).mapN((a, b) => SecretPackage(a.name, (a.payload, b.payload)))
+      yield (p, m).mapN((a, b) => Secret(a.name, (a.payload, b.payload)))
 
-    override def loadPayload(secret: SecretPackage[Path]): F[PackResult[RawSecretData]] =
+    override def loadPayload(secret: Secret[Path]): F[PackResult[RawSecretData]] =
       val path = secret.payload
 
       blocking(Files.exists(path)).flatMap { exists =>
-        if !exists then
-          RepositoryErr.Corrupted(secret.name).asLeft[SecretPackage[RawSecretData]].pure[F]
+        if !exists then RepositoryErr.Corrupted(secret.name).asLeft[Secret[RawSecretData]].pure[F]
         else
           for raw <- blocking(Files.readAllBytes(path))
-          yield SecretPackage(secret.name, RawSecretData.fromRaw(raw)).asRight
+          yield Secret(secret.name, RawSecretData.fromRaw(raw)).asRight
       }
 
 end RepositoryReader
@@ -354,7 +219,7 @@ def cutTree[A](root: Node[Branch[A]], f: A => Boolean): Option[Node[Branch[A]]] 
 
   filter_(marked)
 
-def mapBranch: Entry => Branch[SecretPackage[RawStoreLocations]] =
+def mapBranch: Entry => Branch[Secret[Locations]] =
   case Entry(dir, Chain.nil) => Branch.Node(dir)
   case Entry(dir, files) =>
     (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
@@ -362,9 +227,7 @@ def mapBranch: Entry => Branch[SecretPackage[RawStoreLocations]] =
         Branch
           .Leaf(
             dir,
-            SecretPackage(SecretName.of(dir.toString).toOption.get,
-                          RawStoreLocations(payload, meta)
-            )
+            Secret(SecretName.of(dir.toString).toOption.get, Locations(payload, meta))
           ) // todo
       case _ => Branch.Node(dir)
 
@@ -373,10 +236,10 @@ def main(): Unit =
   given Show[Entry] = Show.show(e => s"path = ${e.path}  [${e.files.toList.mkString(", ")}]")
 
   val tree = walkFileTree(Paths.get("", ".tmps"), _.endsWith(".git"))
-  val bree: Node[Branch[SecretPackage[RawStoreLocations]]] = tree.traverse(a => Id(mapBranch(a)))
+  val bree: Node[Branch[Secret[Locations]]] = tree.traverse(a => Id(mapBranch(a)))
 
-  val res: Option[Node[Branch[SecretPackage[RawStoreLocations]]]] = cutTree(bree, _ => true)
+  val res: Option[Node[Branch[Secret[Locations]]]] = cutTree(bree, _ => true)
 
-  given [A]: Show[SecretPackage[A]] = Show.show(s => s"${s.name}")
+  given [A]: Show[Secret[A]] = Show.show(s => s"${s.name}")
 
   println(res.show)

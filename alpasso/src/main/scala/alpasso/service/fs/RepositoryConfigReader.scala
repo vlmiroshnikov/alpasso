@@ -46,7 +46,7 @@ object RepositoryProvisioner:
 
     val gitted: Provisioner[Mid[F, *]] = GitProvisioner[F](repoDir)
     val logged: Provisioner[Mid[F, *]] = LoggingProvisioner[F]
-    val cs: Provisioner[Mid[F, *]] = CypherProvisioner[F]
+    val cs: Provisioner[Mid[F, *]]     = CypherProvisioner[F]
 
     (cs |+| gitted |+| logged) attach alg
 
@@ -101,7 +101,7 @@ object RepositoryProvisioner:
         if exists then ProvisionErr.AlreadyExists(fullPath).asLeft.pure[F]
         else {
           for
-           // _ <- blocking(Files.createDirectory(repoDir))
+            _ <- blocking(Files.createDirectory(repoDir))
             _ <- blocking(Files.writeString(fullPath, config.asJson.noSpaces, CREATE_NEW, WRITE))
           yield ().asRight
         }

@@ -8,7 +8,7 @@ import scala.util.Try
 import cats.*
 
 import alpasso.common.Converter
-import alpasso.core.model.SecretMetadata
+import alpasso.domain.SecretMetadata
 
 import Console.*
 
@@ -25,8 +25,7 @@ object SimpleMetadataView:
     val m    = sm.asMap
     val e    = m.get(ExpiredAtTag).flatMap(ExpiredTag.of)
     val r    = m.get(RefTag)
-    val tags = m.view.filterKeys(k => !(ExpiredAtTag != k || RefTag != k)).toMap
-
+    val tags = m.view.filterKeys(k => !(ExpiredAtTag == k || RefTag == k)).toMap
     SimpleMetadataView(e, r, tags)
 
   given Show[SimpleMetadataView] = Show.show { m =>

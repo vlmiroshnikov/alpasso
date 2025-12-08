@@ -4,7 +4,7 @@ import cats.*
 import cats.syntax.all.*
 
 import alpasso.common.{ Converter, Package }
-import alpasso.core.model.*
+import alpasso.domain.{ SecretName, SensitiveMode }
 
 import Console.*
 import SimpleMetadataView.given
@@ -25,7 +25,7 @@ object SecretView:
 
     val secret = mode match
       case SensitiveMode.Show   => s.payload.getOrElse("")
-      case SensitiveMode.Masked => "*******"
+      case SensitiveMode.Masked => s.payload.fold("")(_ => "*******")
 
     val meta = s.metadata.fold("")(_.show)
     s"${GREEN}${s.name.show}${RESET} $BLUE${secret}$RESET $meta"

@@ -49,7 +49,9 @@ object SessionManager:
         yield ctx.toOption
 
     private def save(data: SessionData): F[Unit] =
-      blocking(Files.writeString(sessionFile, data.asJson.spaces2, CREATE, TRUNCATE_EXISTING, WRITE))
+      blocking(
+        Files.writeString(sessionFile, data.asJson.spaces2, CREATE, TRUNCATE_EXISTING, WRITE)
+      )
 
     private def modify(f: SessionData => SessionData): F[Unit] =
       OptionT(readData()).cata(f(empty), f) >>= save

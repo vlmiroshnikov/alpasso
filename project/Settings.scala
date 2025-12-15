@@ -24,7 +24,7 @@ object Settings {
 object Deps {
   lazy val cats       = Seq("org.typelevel" %% "cats-core").map(_ % Versions.cats)
   lazy val catsEffect = Seq("org.typelevel" %% "cats-effect").map(_ % Versions.catsEffect)
-  lazy val tagless    = Seq("org.typelevel" %% "cats-tagless-core" % "0.16.3")
+  lazy val tagless    = Seq("org.typelevel" %% "cats-tagless-core" % "0.16.4")
   lazy val glass      = Seq("tf.tofu" %% "glass-core" % "0.3.0")
   lazy val tofu       = Seq("tf.tofu" %% "tofu-core-higher-kind" % "0.14.0")
 

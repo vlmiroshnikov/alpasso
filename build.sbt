@@ -7,7 +7,7 @@ lazy val alpasso = project
   .enablePlugins(NativeImagePlugin)
   .enablePlugins(BuildInfoPlugin)
   .settings(
-    Compile / mainClass             := Some("alpasso.cli.AlpassoApp"),
+    Compile / mainClass             := Some("alpasso.AlpassoApp"),
     Compile / discoveredMainClasses := Seq()
   )
   .settings(
@@ -24,7 +24,7 @@ lazy val alpasso = project
   )
   .settings(
     buildInfoKeys := Seq[BuildInfoKey](name, ThisBuild / version, scalaVersion),
-    buildInfoPackage := "alpasso.common.build"
+    buildInfoPackage := "alpasso.shared.models"
   )
   .settings(Settings.common)
   .settings(

@@ -9,11 +9,10 @@ import alpasso.domain.*
 import alpasso.infrastructure.cypher.*
 import alpasso.infrastructure.filesystem.*
 import alpasso.infrastructure.filesystem.models.*
-import alpasso.infrastructure.git.{ GitError, GitRepo }
-import alpasso.infrastructure.session.models.*
+import alpasso.infrastructure.git.GitRepo
 import alpasso.presentation.{ *, given }
 import alpasso.shared.errors.Err
-import alpasso.shared.models.{ Node, Package, Result, SemVer }
+import alpasso.shared.models.{ Node, Package, Result }
 import alpasso.shared.syntax.*
 
 import glass.*
@@ -57,8 +56,10 @@ object Command:
     override def filter(filter: SecretFilter): F[Result[Option[Node[Branch[SecretView]]]]] =
       def predicate(p: Package): Boolean =
         filter match
-          case SecretFilter.Grep(pattern) => p.name.asPath.toString.contains(pattern)
-          case SecretFilter.Empty         => true
+          case SecretFilter.Grep(pattern) =>
+            p.name.asPath.toString.contains(pattern)
+          case SecretFilter.Empty         =>
+            true
 
       def load(s: Secret[Locations]) =
         reader.loadFully(s).liftE[Err].nested.map((d, m) => (d.into(), m.into())).value

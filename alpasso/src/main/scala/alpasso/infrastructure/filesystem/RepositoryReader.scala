@@ -51,8 +51,8 @@ type PackResult[T] = Result[Secret[T]]
 trait RepositoryReader[F[_]] derives ApplyK:
   def loadPayload(secret: Secret[Path]): F[PackResult[RawSecretData]]
   def loadMeta(secret: Secret[Path]): F[PackResult[RawMetadata]]
-  def loadFully(secret: Secret[Locations]): F[PackResult[(RawSecretData, RawMetadata)]]
-  def walkTree: F[Result[Node[Branch[Secret[Locations]]]]]
+  def loadFully(path: Secret[SecretPathEntries]): F[PackResult[(RawSecretData, RawMetadata)]]
+  def walkTree: F[Result[Node[Branch[Secret[SecretPathEntries]]]]]
 
 object RepositoryReader:
 
@@ -76,17 +76,14 @@ object RepositoryReader:
     override def loadMeta(secret: Secret[Path]): Mid[F, PackResult[RawMetadata]] =
       identity
 
-    override def loadFully(
-        secret: Secret[
-          Locations
-        ]): Mid[F, Result[Secret[(RawSecretData, RawMetadata)]]] =
+    override def loadFully(secret: Secret[SecretPathEntries]): Mid[F, Result[Secret[(RawSecretData, RawMetadata)]]] =
       action =>
         (for
           d <- EitherT(action)
           r <- cs.decrypt(d.payload._1.byteArray).liftE[RepositoryErr]
         yield d.copy(payload = (RawSecretData.fromRaw(r), d.payload._2))).value
 
-    override def walkTree: Mid[F, Result[Node[Branch[Secret[Locations]]]]] =
+    override def walkTree: Mid[F, Result[Node[Branch[Secret[SecretPathEntries]]]]] =
       identity
   }
 
@@ -101,28 +98,25 @@ object RepositoryReader:
     override def loadMeta(secret: Secret[Path]): Mid[F, PackResult[RawMetadata]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
-    override def loadFully(
-        secret: Secret[
-          Locations
-        ]): Mid[F, PackResult[(RawSecretData, RawMetadata)]] =
+    override def loadFully(secret: Secret[SecretPathEntries]): Mid[F, PackResult[(RawSecretData, RawMetadata)]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
-    override def walkTree: Mid[F, Result[Node[Branch[Secret[Locations]]]]] =
+    override def walkTree: Mid[F, Result[Node[Branch[Secret[SecretPathEntries]]]]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
   }
 
-  class Impl[F[_]: Sync as F](repoDir: Path) extends RepositoryReader[F]:
+  class Impl[F[_]: Sync as F](repoDir: RepoRootDir) extends RepositoryReader[F]:
     import F.blocking
 
-    override def walkTree: F[Result[Node[Branch[Secret[Locations]]]]] =
-      def mapBranch: Entry => Branch[Secret[Locations]] =
+    override def walkTree: F[Result[Node[Branch[Secret[SecretPathEntries]]]]] =
+      def mapBranch: Entry => Branch[Secret[SecretPathEntries]] =
         case Entry(dir, Chain.nil) => Branch.Node(dir)
         case Entry(dir, files) =>
           (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
             case (Some(meta), Some(payload)) =>
               val name = SecretName.of(repoDir.relativize(dir).toString).toOption.get // todo
-              Branch.Leaf(dir, Secret(name, Locations(payload, meta)))
+              Branch.Leaf(dir, Secret(name, SecretPathEntries.from(repoDir, name)))
             case _ => Branch.Node(dir)
 
       val exceptDir: Path => Boolean = p => p.endsWith(".git") || p.endsWith(".alpasso")
@@ -142,10 +136,10 @@ object RepositoryReader:
             .bimap(_ => RepositoryErr.Corrupted(secret.name), Secret(secret.name, _))
       }
 
-    override def loadFully(secret: Secret[Locations]): F[PackResult[(RawSecretData, RawMetadata)]] =
+    override def loadFully(secret: Secret[SecretPathEntries]): F[PackResult[(RawSecretData, RawMetadata)]] =
       for
-        p <- loadPayload(secret.map(_.secretData))
-        m <- loadMeta(secret.map(_.metadata))
+        p <- loadPayload(secret.map(_.payload))
+        m <- loadMeta(secret.map(_.meta))
       yield (p, m).mapN((a, b) => Secret(a.name, (a.payload, b.payload)))
 
     override def loadPayload(secret: Secret[Path]): F[PackResult[RawSecretData]] =
@@ -211,26 +205,26 @@ def cutTree[A](root: Node[Branch[A]], f: A => Boolean): Option[Node[Branch[A]]] 
 
   filter_(marked)
 
-def mapBranch: Entry => Branch[Secret[Locations]] =
+def mapBranch(repoRootDir: RepoRootDir): Entry => Branch[Secret[SecretPathEntries]] =
   case Entry(dir, Chain.nil) => Branch.Node(dir)
   case Entry(dir, files) =>
     (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
       case (Some(meta), Some(payload)) =>
-        Branch
-          .Leaf(
-            dir,
-            Secret(SecretName.of(dir.toString).toOption.get, Locations(payload, meta))
-          ) // todo
+        val name = SecretName.of(dir.toString).toOption.get
+        val spe = SecretPathEntries.from(repoRootDir, name)
+
+        Branch.Leaf(dir, Secret(name, spe)) // todo check path 
       case _ => Branch.Node(dir)
 
 @main
 def main(): Unit =
   given Show[Entry] = Show.show(e => s"path = ${e.path}  [${e.files.toList.mkString(", ")}]")
 
-  val tree = walkFileTree(Paths.get("", ".tmps"), _.endsWith(".git"))
-  val bree: Node[Branch[Secret[Locations]]] = tree.traverse(a => Id(mapBranch(a)))
+  val root = RepoRootDir.fromPath(Paths.get("", ".tmps")).toOption.get
+  val tree = walkFileTree(root, _.endsWith(".git"))
+  val bree: Node[Branch[Secret[SecretPathEntries]]] = tree.traverse(a => Id(mapBranch(root)(a)))
 
-  val res: Option[Node[Branch[Secret[Locations]]]] = cutTree(bree, _ => true)
+  val res: Option[Node[Branch[Secret[SecretPathEntries]]]] = cutTree(bree, _ => true)
 
   given [A]: Show[Secret[A]] = Show.show(s => s"${s.name}")
 

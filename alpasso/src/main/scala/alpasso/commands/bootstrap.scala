@@ -3,7 +3,6 @@ package alpasso.commands
 import java.nio.file.Path
 
 import cats.effect.*
-import cats.syntax.all.*
 
 import alpasso.infrastructure.cypher.CypherAlg
 import alpasso.infrastructure.filesystem.{ PersistentModels, RepositoryProvisioner }
@@ -11,8 +10,6 @@ import alpasso.presentation.StorageView
 import alpasso.shared.errors.*
 import alpasso.shared.models.{ Result, SemVer }
 import alpasso.shared.syntax.*
-
-import glass.*
 
 def bootstrap[F[_]: { Sync }](
     repoDir: Path,

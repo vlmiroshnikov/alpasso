@@ -4,12 +4,13 @@ import java.nio.file.StandardOpenOption.*
 import java.nio.file.{ Files, OpenOption, Path }
 
 import cats.*
-import cats.data.*
+import cats.data.{ NonEmptyList as NEL, * }
 import cats.effect.*
 import cats.syntax.all.*
 import cats.tagless.*
 
-import alpasso.domain.SecretName
+import alpasso.domain.{ Secret, SecretName }
+import alpasso.infrastructure.cypher.CypherService
 import alpasso.infrastructure.filesystem.models.*
 import alpasso.infrastructure.git.GitRepo
 import alpasso.shared.syntax.*
@@ -17,26 +18,76 @@ import alpasso.shared.syntax.*
 import tofu.higherKind.*
 import tofu.higherKind.Mid.*
 
-trait RepositoryMutator[F[_]] derives ApplyK:
+case class RawData(data: RawSecretData, meta: RawMetadata)
 
+/*
+
+type State = Int
+
+type ST[F[_], A] = StateT[F, State, A]
+
+trait Join[F[_]] derives ApplyK :
+  def test(a: Int): F[String]
+
+object Join {
+
+  class Impl[F[_]: Sync]() extends Join[ST[F, *]] {
+    override def test(a: Int): ST[F, String] =
+      for {
+        s <- StateT.get[F, State]
+      } yield s"state: ${s} , param ${a}"
+  }
+
+  class Enc[F[_]: Sync]() extends Join[Mid[ST[F, *], *]] {
+    override def test(a: Int): Mid[ST[F, *], String] = action => {
+      for
+        s      <- StateT.set[F, State](a * 10)
+        result <- action
+      yield result
+    }
+  }
+
+  def make[F[_]: Sync]() : Join[ST[F, *]] = {
+    val encoder = new Enc[F]
+    val impl =  new Impl[F]
+
+    encoder.attach(impl)
+  }
+}
+
+@main
+def entry: Unit = {
+  import cats.effect.unsafe.implicits.global
+  val result = Join.make[IO]().test(3).run(0).unsafeRunSync()
+  println(s"Result: $result")
+}
+
+ */
+
+trait RepositoryMutator[F[_]] derives ApplyK:
   def create(
       name: SecretName,
-      payload: RawSecretData,
-      meta: RawMetadata): F[Result[Locations]]
+      meta: RawMetadata): F[Result[Unit]]
 
   def update(
       name: SecretName,
-      payload: RawSecretData,
-      meta: RawMetadata): F[Result[Locations]]
-  def remove(name: SecretName): F[Result[Locations]]
+      meta: RawMetadata): F[Result[Unit]]
+
+  def remove(name: SecretName): F[Result[Unit]]
 
 object RepositoryMutator:
 
-  def make[F[_]: { Async }](config: RepositoryConfiguration): RepositoryMutator[F] =
-    val gitted: RepositoryMutator[Mid[F, *]] = Gitted[F](config.repoDir)
-    gitted attach Impl[F](config.repoDir)
+  type State           = Option[RawSecretData]
+  type StateF[F[_], A] = StateT[F, State, A]
 
-  class Impl[F[_]: { Sync as F }](repoDir: Path) extends RepositoryMutator[F] {
+  def make[F[_]: { Async }](
+      config: RepositoryConfiguration,
+      cs: CypherService[F]): RepositoryMutator[StateF[F, *]] =
+    val gitted : RepositoryMutator[Mid[StateF[F, *], *]]  = Gitted[F](config.repoDir)
+    val crypted : RepositoryMutator[Mid[StateF[F, *], *]] = Crypted[F](cs)
+    (crypted |+| gitted).attach(Impl[F](config.repoDir))
+
+  class Impl[F[_]: { Sync as F }](repoDir: RepoRootDir) extends RepositoryMutator[StateF[F, *]] {
 
     import java.nio.file.Files.*
 
@@ -45,101 +96,153 @@ object RepositoryMutator:
     private val CreateOps: List[OpenOption] = List(CREATE_NEW, WRITE)
     private val UpdateOps: List[OpenOption] = List(CREATE, TRUNCATE_EXISTING, WRITE)
 
-    override def remove(name: SecretName): F[Result[Locations]] =
-      val path = repoDir.resolve(name.asPath)
+    override def remove(name: SecretName): StateF[F, Result[Unit]] =
+      val p = SecretPathEntries.from(repoDir, name)
 
-      val metaPath    = path.resolve("meta")
-      val payloadPath = path.resolve("payload")
-
-      blocking(Files.exists(payloadPath)).flatMap { rootExists =>
+      val r = blocking(Files.exists(p.payload)).flatMap { rootExists =>
         if !rootExists then RepositoryErr.NotFound(name).asLeft.pure[F]
         else
           for
-            _ <- blocking(Files.deleteIfExists(metaPath))
-            _ <- blocking(Files.deleteIfExists(payloadPath))
-            _ <- blocking(Files.deleteIfExists(path))
-          yield Locations(payloadPath, metaPath).asRight
+            _ <- blocking(Files.deleteIfExists(p.meta))
+            _ <- blocking(Files.deleteIfExists(p.payload))
+            _ <- blocking(Files.deleteIfExists(p.root))
+          yield ().asRight[RepositoryErr]
       }
+
+      StateT.liftF(r)
 
     override def create(
         name: SecretName,
-        payload: RawSecretData,
-        meta: RawMetadata): F[Result[Locations]] =
-      val path = repoDir.resolve(name.asPath)
+        meta: RawMetadata): StateF[F, Result[Unit]] =
+      val p = SecretPathEntries.from(repoDir, name)
 
-      val metaPath    = path.resolve("meta")
-      val payloadPath = path.resolve("payload")
-
-      blocking(exists(path) && exists(payloadPath)).flatMap { rootExists =>
-        if rootExists then RepositoryErr.AlreadyExists(name).asLeft.pure[F]
+      StateT.liftF(blocking(exists(p.root) && exists(p.payload))).flatMap { rootExists =>
+        if rootExists then StateT.pure(RepositoryErr.AlreadyExists(name).asLeft)
         else
           for
-            _ <- blocking(createDirectories(path))
-            _ <- blocking(write(payloadPath, payload.byteArray, CreateOps*))
-            _ <- blocking(writeString(metaPath, meta.rawString, CreateOps*))
-          yield Locations(payloadPath, metaPath).asRight
+            _           <- StateT.liftF(blocking(createDirectories(p.root)))
+            encodedOpt  <- StateT.get[F, State]
+            _           <- StateT.liftF(blocking(write(p.payload, encodedOpt.getOrElse(RawSecretData.empty).byteArray, CreateOps*)))
+            _           <- StateT.liftF(blocking(writeString(p.meta, meta.rawString, CreateOps*)))
+          yield ().asRight
       }
 
     override def update(
         name: SecretName,
-        payload: RawSecretData,
-        metadata: RawMetadata): F[Result[Locations]] =
-      val path = repoDir.resolve(name.asPath)
+        metadata: RawMetadata): StateF[F, Result[Unit]] =
 
-      val metaPath    = path.resolve("meta")
-      val payloadPath = path.resolve("payload")
+      val p = SecretPathEntries.from(repoDir, name)
 
-      blocking(exists(path) && exists(metaPath)).flatMap { exists =>
-        if !exists then RepositoryErr.Corrupted(name).asLeft.pure[F]
+      StateT.liftF(blocking(exists(p.root) && exists(p.payload))).flatMap { rootExists =>
+        if rootExists then StateT.pure(RepositoryErr.Corrupted(name).asLeft)
         else
           for
-            _ <- blocking(write(payloadPath, payload.byteArray, UpdateOps*))
-            _ <- blocking(writeString(metaPath, metadata.rawString, UpdateOps*))
-          yield Locations(payloadPath, metaPath).asRight
+            encodedOpt <- StateT.get[F, State]
+            _       <- StateT.liftF(blocking(write(p.payload, encodedOpt.getOrElse(RawSecretData.empty).byteArray, UpdateOps*)))
+            _       <- StateT.liftF(blocking(writeString(p.meta, metadata.rawString, UpdateOps*)))
+          yield ().asRight
       }
   }
 
-  class Gitted[F[_]: Sync](repoDir: Path) extends RepositoryMutator[Mid[F, *]] {
+  class Crypted[F[_]: Sync](cs: CypherService[F]) extends RepositoryMutator[Mid[StateF[F, *], *]] {
 
-    override def create(
-        name: SecretName,
-        payload: RawSecretData,
-        meta: RawMetadata): Mid[F, Result[Locations]] =
-      action => {
-        GitRepo.openExists(repoDir).use { git =>
-          val commitMsg = s"Add secret [$name]"
-          (for
-            locations <- EitherT(action)
-            files = NonEmptyList.of(locations.secretData, locations.metadata)
-            _ <- git.commitFiles(files, commitMsg).liftE[RepositoryErr]
-          yield locations).value
+//      action => {
+//        val result =
+//          for enc <- cs.encrypt(s.payload.data.byteArray).liftE[RepositoryErr]
+//          yield Secret(s.name, RawData(RawSecretData.fromRaw(enc), s.payload.meta))
+//
+//        result.value
+//      }
+
+    override def create(name: SecretName, meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] =
+      action  =>
+        {
+          val result: StateF[F, Result[Unit]] = {
+            for
+              st  <- StateT.get[F, State]
+              enc <- StateT.liftF(cs.encrypt(st.get.byteArray).liftE[RepositoryErr].value)
+              _   <- StateT.set[F, State](enc.toOption.map(RawSecretData.fromRaw))
+            yield enc.map(_ => ())
+          }
+
+          result
         }
-      }
 
     override def update(
         name: SecretName,
-        payload: RawSecretData,
-        meta: RawMetadata): Mid[F, Result[Locations]] =
-      action => {
-        GitRepo.openExists(repoDir).use { git =>
-          val commitMsg = s"Update secret [$name]"
-          (for
-            locations <- EitherT(action)
-            files = NonEmptyList.of(locations.secretData, locations.metadata)
-            _ <- git.commitFiles(files, commitMsg).liftE[RepositoryErr]
-          yield locations).value
-        }
-      }
+        meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] = identity
 
-    override def remove(name: SecretName): Mid[F, Result[Locations]] =
+    override def remove(name: SecretName): Mid[StateF[F, *], Result[Unit]] = identity
+  }
+
+  class Gitted[F[_]: Sync](repoDir: RepoRootDir) extends RepositoryMutator[Mid[StateF[F, *], *]] {
+
+//    override def create( s: Secret[RawData]): Mid[StateF[F, *], Result[Unit]] =
+//      action => {
+//        StateT.liftF(
+//          GitRepo.openExists(repoDir).use { git =>
+//            val commitMsg = s"Add secret [${s.name}]"
+//
+//            val locs = SecretPathEntries.from(repoDir, s.name)
+//            (for
+//              res <- EitherT(action)
+//              _   <- git.commitFiles(NEL.of(locs.payload, locs.meta), commitMsg).liftE[RepositoryErr]
+//            yield ()).value
+//         }
+//        )
+//      }
+
+    override def create(
+        name: SecretName,
+        meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] =
       action => {
-        GitRepo.openExists(repoDir).use { git =>
-          val commitMsg = s"Remove secret [$name]"
-          (for
-            locations <- EitherT(action)
-            files = NonEmptyList.of(locations.secretData, locations.metadata)
-            _ <- git.removeFiles(files, commitMsg).liftE[RepositoryErr]
-          yield locations).value
-        }
-      }
+
+        val commitMsg = s"Add secret [$name]"
+        val locs = SecretPathEntries.from(repoDir, name)
+
+//        def run(act: StateF[F, Result[Unit]]): F[Either[RepositoryErr, Unit]] = GitRepo.openExists(repoDir).use { git =>
+//
+//          (for
+//            _ <- act
+//            _ <- git.commitFiles(NEL.of(locs.payload, locs.meta), commitMsg).liftE[RepositoryErr]
+//          yield ()).value
+//        }
+
+        val fileNames = NEL.of(locs.payload, locs.meta)
+        val r = for {
+          st <-  action.toEitherT
+          _  <-  StateT.liftF(GitRepo.openExists(repoDir).use(_.commitFiles(fileNames, commitMsg))).liftE[RepositoryErr]
+        } yield ()
+
+        r.value
+    }
+
+    override def update(name: SecretName, meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] = ???
+
+    override def remove(name: SecretName): Mid[StateF[F, *], Result[Unit]] = ???
+    //    override def update(
+//        name: SecretName,
+//        meta: RawMetadata): Mid[F,Result[Unit]] =
+//      action => {
+//          GitRepo.openExists(repoDir).use { git =>
+//            val commitMsg = s"Update secret [$name]"
+//            val locs      = SecretPathEntries.from(repoDir, name)
+//            (for
+//              _ <- EitherT(action)
+//              _ <- git.commitFiles(NEL.of(locs.payload, locs.meta), commitMsg).liftE[RepositoryErr]
+//            yield ()).value
+//          }
+//      }
+//
+//    override def remove(name: SecretName): Mid[F, Result[Unit]] =
+//      action => {
+//          GitRepo.openExists(repoDir).use { git =>
+//            val commitMsg = s"Remove secret [$name]"
+//            val locs      = SecretPathEntries.from(repoDir, name)
+//            (for
+//              _ <- EitherT(action)
+//              _ <- git.removeFiles(NEL.of(locs.payload, locs.meta), commitMsg).liftE[RepositoryErr]
+//            yield ()).value
+//          }
+//      }
   }

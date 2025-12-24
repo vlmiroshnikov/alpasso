@@ -40,7 +40,7 @@ object AlpassoApp extends IOApp:
         session <- EitherT.fromOptionF(smgr.current, Err.UseSwitchCommand)
         cfg     <- rmr.read(session.path).liftE[Err]
         _       <- EitherT.cond(cfg.version == SemVer.current, (), Err.VersionMismatch(cfg.version))
-        result  <- f(RepositoryConfiguration(session.path, cfg.version, cfg.cryptoAlg)).liftE[Err]
+        result  <- f(RepositoryConfiguration(RepoRootDir.fromPath(session.path).toOption.get, cfg.version, cfg.cryptoAlg)).liftE[Err]
       yield result).value
 
     def provideCommand[A](f: Command[IO] => IO[Result[A]]): IO[Result[A]] =

@@ -20,50 +20,6 @@ import tofu.higherKind.Mid.*
 
 case class RawData(data: RawSecretData, meta: RawMetadata)
 
-/*
-
-type State = Int
-
-type ST[F[_], A] = StateT[F, State, A]
-
-trait Join[F[_]] derives ApplyK :
-  def test(a: Int): F[String]
-
-object Join {
-
-  class Impl[F[_]: Sync]() extends Join[ST[F, *]] {
-    override def test(a: Int): ST[F, String] =
-      for {
-        s <- StateT.get[F, State]
-      } yield s"state: ${s} , param ${a}"
-  }
-
-  class Enc[F[_]: Sync]() extends Join[Mid[ST[F, *], *]] {
-    override def test(a: Int): Mid[ST[F, *], String] = action => {
-      for
-        s      <- StateT.set[F, State](a * 10)
-        result <- action
-      yield result
-    }
-  }
-
-  def make[F[_]: Sync]() : Join[ST[F, *]] = {
-    val encoder = new Enc[F]
-    val impl =  new Impl[F]
-
-    encoder.attach(impl)
-  }
-}
-
-@main
-def entry: Unit = {
-  import cats.effect.unsafe.implicits.global
-  val result = Join.make[IO]().test(3).run(0).unsafeRunSync()
-  println(s"Result: $result")
-}
-
- */
-
 trait RepositoryMutator[F[_]] derives ApplyK:
   def create(
       name: SecretName,
@@ -162,7 +118,8 @@ object RepositoryMutator:
               st  <- StateT.get[F, State]
               enc <- StateT.liftF(cs.encrypt(st.get.byteArray).liftE[RepositoryErr].value)
               _   <- StateT.set[F, State](enc.toOption.map(RawSecretData.fromRaw))
-            yield enc.map(_ => ())
+              res <- action
+            yield res
           }
 
           result

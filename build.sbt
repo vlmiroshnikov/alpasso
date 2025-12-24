@@ -28,7 +28,7 @@ lazy val alpasso = project
   )
   .settings(Settings.common)
   .settings(
-    libraryDependencies ++= Deps.infra ++ Deps.jgit ++ Deps.circe ++ Deps.decline ++ Deps.logger ++ Deps.munit
+    libraryDependencies ++= Deps.infra ++ Deps.jgit ++ Deps.circe ++ Deps.decline ++ Deps.logger ++ Deps.munit ++ Deps.weaver
   )
 
 lazy val root = project

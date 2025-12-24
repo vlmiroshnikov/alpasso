@@ -36,4 +36,5 @@ object Deps {
   lazy val decline   = Seq("com.monovore" %% "decline" % "2.5.0")
   lazy val logger    = Seq("org.slf4j" % "slf4j-nop" % "2.0.17")
   lazy val munit     = Seq("org.scalameta" %% "munit" % "1.2.1" % Test)
+  lazy val weaver    = Seq("org.typelevel" %% "weaver-cats" % "0.11.3")
 }

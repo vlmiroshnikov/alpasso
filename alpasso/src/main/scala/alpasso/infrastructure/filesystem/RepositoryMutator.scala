@@ -46,9 +46,8 @@ object RepositoryMutator:
 
   class Impl[F[_]: { Sync as F }](repoDir: RepoRootDir) extends RepositoryMutator[StateF[F, *]] {
 
-    import java.nio.file.Files.*
-
-    import F.blocking
+    import FileEffects.*
+    import alpasso.shared.syntax.*
 
     private val CreateOps: List[OpenOption] = List(CREATE_NEW, WRITE)
     private val UpdateOps: List[OpenOption] = List(CREATE, TRUNCATE_EXISTING, WRITE)
@@ -56,36 +55,29 @@ object RepositoryMutator:
     override def remove(name: SecretName): StateF[F, Result[Unit]] =
       val p = SecretPathEntries.from(repoDir, name)
 
-      val r = blocking(Files.exists(p.payload)).flatMap { rootExists =>
-        if !rootExists then RepositoryErr.NotFound(name).asLeft.pure[F]
+      pathExists(p.payload).flatMap { rootExists =>
+        if !rootExists then StateT.pure(RepositoryErr.NotFound(name).asLeft)
         else
           for
-            _ <- blocking(Files.deleteIfExists(p.meta))
-            _ <- blocking(Files.deleteIfExists(p.payload))
-            _ <- blocking(Files.deleteIfExists(p.root))
+            _ <- deleteIfExists(p.meta)
+            _ <- deleteIfExists(p.payload)
+            _ <- deleteIfExists(p.root)
           yield ().asRight[RepositoryErr]
       }
-
-      StateT.liftF(r)
 
     override def create(
         name: SecretName,
         meta: RawMetadata): StateF[F, Result[Unit]] =
       val p = SecretPathEntries.from(repoDir, name)
 
-      StateT.liftF(blocking(exists(p.root) && exists(p.payload))).flatMap { rootExists =>
+      checkSecretExists(p).flatMap { rootExists =>
         if rootExists then StateT.pure(RepositoryErr.AlreadyExists(name).asLeft)
         else
           for
-            _          <- StateT.liftF(blocking(createDirectories(p.root)))
+            _          <- createDirectories(p.root)
             encodedOpt <- StateT.get[F, State]
-            _ <-
-              StateT.liftF(
-                blocking(
-                  write(p.payload, encodedOpt.getOrElse(RawSecretData.empty).byteArray, CreateOps*)
-                )
-              )
-            _ <- StateT.liftF(blocking(writeString(p.meta, meta.rawString, CreateOps*)))
+            _          <- write(p.payload, encodedOpt.getOrElse(RawSecretData.empty).byteArray, CreateOps)
+            _          <- writeString(p.meta, meta.rawString, CreateOps)
           yield ().asRight
       }
 
@@ -95,18 +87,13 @@ object RepositoryMutator:
 
       val p = SecretPathEntries.from(repoDir, name)
 
-      StateT.liftF(blocking(exists(p.root) && exists(p.payload))).flatMap { rootExists =>
+      checkSecretExists(p).flatMap { rootExists =>
         if rootExists then StateT.pure(RepositoryErr.Corrupted(name).asLeft)
         else
           for
             encodedOpt <- StateT.get[F, State]
-            _ <-
-              StateT.liftF(
-                blocking(
-                  write(p.payload, encodedOpt.getOrElse(RawSecretData.empty).byteArray, UpdateOps*)
-                )
-              )
-            _ <- StateT.liftF(blocking(writeString(p.meta, metadata.rawString, UpdateOps*)))
+            _          <- write(p.payload, encodedOpt.getOrElse(RawSecretData.empty).byteArray, UpdateOps)
+            _          <- writeString(p.meta, metadata.rawString, UpdateOps)
           yield ().asRight
       }
   }

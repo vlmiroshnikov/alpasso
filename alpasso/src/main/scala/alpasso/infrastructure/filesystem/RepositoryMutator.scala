@@ -21,6 +21,7 @@ import tofu.higherKind.Mid.*
 case class RawData(data: RawSecretData, meta: RawMetadata)
 
 trait RepositoryMutator[F[_]] derives ApplyK:
+
   def create(
       name: SecretName,
       meta: RawMetadata): F[Result[Unit]]
@@ -39,8 +40,8 @@ object RepositoryMutator:
   def make[F[_]: { Async }](
       config: RepositoryConfiguration,
       cs: CypherService[F]): RepositoryMutator[StateF[F, *]] =
-    val gitted : RepositoryMutator[Mid[StateF[F, *], *]]  = Gitted[F](config.repoDir)
-    val crypted : RepositoryMutator[Mid[StateF[F, *], *]] = Crypted[F](cs)
+    val gitted: RepositoryMutator[Mid[StateF[F, *], *]]  = Gitted[F](config.repoDir)
+    val crypted: RepositoryMutator[Mid[StateF[F, *], *]] = Crypted[F](cs)
     (crypted |+| gitted).attach(Impl[F](config.repoDir))
 
   class Impl[F[_]: { Sync as F }](repoDir: RepoRootDir) extends RepositoryMutator[StateF[F, *]] {
@@ -76,10 +77,15 @@ object RepositoryMutator:
         if rootExists then StateT.pure(RepositoryErr.AlreadyExists(name).asLeft)
         else
           for
-            _           <- StateT.liftF(blocking(createDirectories(p.root)))
-            encodedOpt  <- StateT.get[F, State]
-            _           <- StateT.liftF(blocking(write(p.payload, encodedOpt.getOrElse(RawSecretData.empty).byteArray, CreateOps*)))
-            _           <- StateT.liftF(blocking(writeString(p.meta, meta.rawString, CreateOps*)))
+            _          <- StateT.liftF(blocking(createDirectories(p.root)))
+            encodedOpt <- StateT.get[F, State]
+            _ <-
+              StateT.liftF(
+                blocking(
+                  write(p.payload, encodedOpt.getOrElse(RawSecretData.empty).byteArray, CreateOps*)
+                )
+              )
+            _ <- StateT.liftF(blocking(writeString(p.meta, meta.rawString, CreateOps*)))
           yield ().asRight
       }
 
@@ -94,8 +100,13 @@ object RepositoryMutator:
         else
           for
             encodedOpt <- StateT.get[F, State]
-            _       <- StateT.liftF(blocking(write(p.payload, encodedOpt.getOrElse(RawSecretData.empty).byteArray, UpdateOps*)))
-            _       <- StateT.liftF(blocking(writeString(p.meta, metadata.rawString, UpdateOps*)))
+            _ <-
+              StateT.liftF(
+                blocking(
+                  write(p.payload, encodedOpt.getOrElse(RawSecretData.empty).byteArray, UpdateOps*)
+                )
+              )
+            _ <- StateT.liftF(blocking(writeString(p.meta, metadata.rawString, UpdateOps*)))
           yield ().asRight
       }
   }
@@ -111,19 +122,18 @@ object RepositoryMutator:
 //      }
 
     override def create(name: SecretName, meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] =
-      action  =>
-        {
-          val result: StateF[F, Result[Unit]] = {
-            for
-              st  <- StateT.get[F, State]
-              enc <- StateT.liftF(cs.encrypt(st.get.byteArray).liftE[RepositoryErr].value)
-              _   <- StateT.set[F, State](enc.toOption.map(RawSecretData.fromRaw))
-              res <- action
-            yield res
-          }
-
-          result
+      action => {
+        val result: StateF[F, Result[Unit]] = {
+          for
+            st  <- StateT.get[F, State]
+            enc <- StateT.liftF(cs.encrypt(st.get.byteArray).liftE[RepositoryErr].value)
+            _   <- StateT.set[F, State](enc.toOption.map(RawSecretData.fromRaw))
+            res <- action
+          yield res
         }
+
+        result
+      }
 
     override def update(
         name: SecretName,
@@ -155,7 +165,7 @@ object RepositoryMutator:
       action => {
 
         val commitMsg = s"Add secret [$name]"
-        val locs = SecretPathEntries.from(repoDir, name)
+        val locs      = SecretPathEntries.from(repoDir, name)
 
 //        def run(act: StateF[F, Result[Unit]]): F[Either[RepositoryErr, Unit]] = GitRepo.openExists(repoDir).use { git =>
 //
@@ -167,12 +177,14 @@ object RepositoryMutator:
 
         val fileNames = NEL.of(locs.payload, locs.meta)
         val r = for {
-          st <-  action.toEitherT
-          _  <-  StateT.liftF(GitRepo.openExists(repoDir).use(_.commitFiles(fileNames, commitMsg))).liftE[RepositoryErr]
+          st <- action.toEitherT
+          _ <- StateT
+                 .liftF(GitRepo.openExists(repoDir).use(_.commitFiles(fileNames, commitMsg)))
+                 .liftE[RepositoryErr]
         } yield ()
 
         r.value
-    }
+      }
 
     override def update(name: SecretName, meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] = ???
 

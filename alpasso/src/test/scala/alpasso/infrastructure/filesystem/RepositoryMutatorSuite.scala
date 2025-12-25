@@ -31,7 +31,6 @@ object RepositoryMutatorSuite extends SimpleIOSuite {
 
     val metadata = RawMetadata.of(Map("description" -> "Test secret"))
 
-    // Run the stateful operation with initial state
     mutator.create(secretName, metadata)
       .runA(Some(RawSecretData.fromRaw("test-data".getBytes)))
       .map { result =>

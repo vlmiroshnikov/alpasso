@@ -76,7 +76,8 @@ object RepositoryReader:
     override def loadMeta(secret: Secret[Path]): Mid[F, PackResult[RawMetadata]] =
       identity
 
-    override def loadFully(secret: Secret[SecretPathEntries]): Mid[F, Result[Secret[(RawSecretData, RawMetadata)]]] =
+    override def loadFully(
+        secret: Secret[SecretPathEntries]): Mid[F, Result[Secret[(RawSecretData, RawMetadata)]]] =
       action =>
         (for
           d <- EitherT(action)
@@ -98,7 +99,8 @@ object RepositoryReader:
     override def loadMeta(secret: Secret[Path]): Mid[F, PackResult[RawMetadata]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
-    override def loadFully(secret: Secret[SecretPathEntries]): Mid[F, PackResult[(RawSecretData, RawMetadata)]] =
+    override def loadFully(
+        secret: Secret[SecretPathEntries]): Mid[F, PackResult[(RawSecretData, RawMetadata)]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
     override def walkTree: Mid[F, Result[Node[Branch[Secret[SecretPathEntries]]]]] =
@@ -136,7 +138,8 @@ object RepositoryReader:
             .bimap(_ => RepositoryErr.Corrupted(secret.name), Secret(secret.name, _))
       }
 
-    override def loadFully(secret: Secret[SecretPathEntries]): F[PackResult[(RawSecretData, RawMetadata)]] =
+    override def loadFully(
+        secret: Secret[SecretPathEntries]): F[PackResult[(RawSecretData, RawMetadata)]] =
       for
         p <- loadPayload(secret.map(_.payload))
         m <- loadMeta(secret.map(_.meta))
@@ -211,9 +214,9 @@ def mapBranch(repoRootDir: RepoRootDir): Entry => Branch[Secret[SecretPathEntrie
     (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
       case (Some(meta), Some(payload)) =>
         val name = SecretName.of(dir.toString).toOption.get
-        val spe = SecretPathEntries.from(repoRootDir, name)
+        val spe  = SecretPathEntries.from(repoRootDir, name)
 
-        Branch.Leaf(dir, Secret(name, spe)) // todo check path 
+        Branch.Leaf(dir, Secret(name, spe)) // todo check path
       case _ => Branch.Node(dir)
 
 @main

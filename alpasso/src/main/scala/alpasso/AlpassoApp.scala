@@ -38,14 +38,10 @@ object AlpassoApp extends IOApp:
     def provideConfig[A](f: RepositoryConfiguration => IO[Result[A]]): IO[Result[A]] =
       (for
         session <- EitherT.fromOptionF(smgr.current, Err.UseSwitchCommand)
+        repoDir <- EitherT.fromOption(RepoRootDir.fromPath(session.path).toOption, Err.InternalErr)
         cfg     <- rmr.read(session.path).liftE[Err]
         _       <- EitherT.cond(cfg.version == SemVer.current, (), Err.VersionMismatch(cfg.version))
-        result <- f(
-                    RepositoryConfiguration(RepoRootDir.fromPath(session.path).toOption.get,
-                                            cfg.version,
-                                            cfg.cryptoAlg
-                    )
-                  ).liftE[Err]
+        result  <- f(RepositoryConfiguration(repoDir, cfg.version, cfg.cryptoAlg)).liftE[Err]
       yield result).value
 
     def provideCommand[A](f: Command[IO] => IO[Result[A]]): IO[Result[A]] =
@@ -63,8 +59,8 @@ object AlpassoApp extends IOApp:
               .flatTap(_.fold(_ => IO.unit, _ => smgr.setup(Session(path))))
             boot >>= handle
 
-          case RepoOp.List => smgr.listAll.map(_.into().asRight[Err]) >>= handle
-          case RepoOp.Log  => provideConfig(historyLog) >>= handle
+          case RepoOp.List        => smgr.listAll.map(_.into().asRight[Err]) >>= handle
+          case RepoOp.Log         => provideConfig(historyLog) >>= handle
           case RepoOp.Switch(sel) =>
             val switch = OptionT(smgr.listAll.map(_.zipWithIndex.find((_, idx) => idx == sel)))
               .cataF(
@@ -94,7 +90,7 @@ object AlpassoApp extends IOApp:
       case Right(Action.Filter(where, OutputFormat.Table, smode)) =>
         given SensitiveMode = smode
         val res             = provideCommand(_.filter(where))
-        val buildTableView = res
+        val buildTableView  = res
           .nested
           .nested
           .map { root =>

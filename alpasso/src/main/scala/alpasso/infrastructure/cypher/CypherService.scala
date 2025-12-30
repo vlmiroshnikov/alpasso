@@ -28,8 +28,8 @@ object CypherService:
       ProcessLogger(fout => println(s"FOUT: ${fout}"), ferr => println(s"FERRL ${ferr}"))
 
     override def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]] =
-      val bis = ByteArrayInputStream(raw)
-      val bos = ByteArrayOutputStream()
+      val bis     = ByteArrayInputStream(raw)
+      val bos     = ByteArrayOutputStream()
       val encrypt =
         Process("gpg", Seq("--encrypt", "--quiet", "--recipient", fg, "--armor")) #< bis #> bos
 
@@ -40,8 +40,8 @@ object CypherService:
       EitherT(result).value
 
     override def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]] =
-      val bis = ByteArrayInputStream(raw)
-      val bos = ByteArrayOutputStream()
+      val bis     = ByteArrayInputStream(raw)
+      val bos     = ByteArrayOutputStream()
       val decrypt =
         Process("gpg", Seq("--decrypt", "--quiet", "--recipient", fg, "--armor")) #< bis #> bos
 

@@ -41,7 +41,7 @@ object RepositoryProvisioner:
 
   val repoMetadataFile: String = ".alpasso"
 
-  def make[F[_]: { Sync }](repoDir: Path): Provisioner[F] =
+  def make[F[_]: {Sync}](repoDir: Path): Provisioner[F] =
     val alg = MetaProvisioner(repoDir)
 
     val gitted: Provisioner[Mid[F, *]] = GitProvisioner[F](repoDir)
@@ -50,17 +50,17 @@ object RepositoryProvisioner:
 
     (cs |+| gitted |+| logged) attach alg
 
-  class CypherProvisioner[F[_]: { Sync }] extends Provisioner[Mid[F, *]] {
+  class CypherProvisioner[F[_]: {Sync}] extends Provisioner[Mid[F, *]] {
 
-    override def provision(config: RepositoryMetaConfig): Mid[F, Either[ProvisionErr, Unit]] = {
-      action =>
-        val cs = config.cryptoAlg match
-          case CypherAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
+    override def provision(
+        config: RepositoryMetaConfig): Mid[F, Either[ProvisionErr, Unit]] = { action =>
+      val cs = config.cryptoAlg match
+        case CypherAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
 
-        (for
-          _ <- EitherT.liftF(cs.encrypt(Array[Byte](1)))
-          r <- EitherT(action)
-        yield r).value
+      (for
+        _ <- EitherT.liftF(cs.encrypt(Array[Byte](1)))
+        r <- EitherT(action)
+      yield r).value
     }
   }
 
@@ -113,7 +113,7 @@ enum RepoMetaErr:
 
 object RepositoryConfigReader:
 
-  def make[F[_]: { Sync as S }]: RepositoryConfigReader[F] = (repoDir: Path) =>
+  def make[F[_]: {Sync as S}]: RepositoryConfigReader[F] = (repoDir: Path) =>
     import S.blocking
 
     val fullPath = repoDir.resolve(RepositoryProvisioner.repoMetadataFile)

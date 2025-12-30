@@ -3,6 +3,7 @@ package alpasso.commands
 import cats.*
 import cats.data.*
 import cats.effect.*
+import cats.effect.std.Console
 import cats.syntax.all.*
 
 import alpasso.domain.*
@@ -40,7 +41,7 @@ trait Command[F[_]]:
 
 object Command:
 
-  def make[F[_]: { Async }](config: RepositoryConfiguration): Command[F] =
+  def make[F[_]: {Sync, Console}](config: RepositoryConfiguration): Command[F] =
     val cs = config.cypherAlg match
       case CypherAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
 
@@ -48,14 +49,13 @@ object Command:
     val mutator: RepositoryMutator[StateF[F, *]] = RepositoryMutator.make(config, cs)
     Impl[F](cs, reader, mutator)
 
-  private class Impl[F[_]: { Async }](
+  private class Impl[F[_]: {Sync, Console}](
       cs: CypherService[F],
       reader: RepositoryReader[F],
       mutator: RepositoryMutator[StateF[F, *]])
       extends Command[F]:
 
-    private def load(
-        s: Secret[SecretPathEntries]): EitherT[F, Err, Secret[(SecretPayload, SecretMetadata)]] =
+    private def load(s: Secret[SecretPathEntries]) =
       reader.loadFully(s).liftE[Err].nested.map((d, m) => (d.into(), m.into())).value
 
     override def filter(filter: SecretFilter): F[Result[Option[Node[Branch[SecretView]]]]] =
@@ -87,14 +87,12 @@ object Command:
         name: SecretName,
         payload: SecretPayload,
         meta: Option[SecretMetadata]): F[Result[SecretView]] =
-      val rmd = meta.map(RawMetadata.from).getOrElse(RawMetadata.empty)
+      val rmd    = meta.map(RawMetadata.from).getOrElse(RawMetadata.empty)
       val result =
-        for
-          // data      <- cs.encrypt(payload.rawData).liftE[Err]
-          locations <- mutator
-                         .create(name, rmd)
-                         .runA(RawSecretData.fromRaw(payload.rawData).some)
-                         .liftE[Err]
+        for locations <- mutator
+                           .create(name, rmd)
+                           .runA(RawSecretData.fromRaw(payload.rawData).some)
+                           .liftE[Err]
         yield SecretView(name, None, meta.map(_.into()))
 
       result.value
@@ -119,7 +117,6 @@ object Command:
           rsd = payload.map(_.rawData).getOrElse(toUpdate.payload._1.byteArray)
           rmd = meta.map(RawMetadata.from).getOrElse(toUpdate.payload._2)
 
-          // sec <- cs.encrypt(rsd).liftE[Err]
           _ <- mutator.update(name, rmd).runA(RawSecretData.fromRaw(rsd).some).liftE[Err]
 
           upd <- lookup(name) >>= load

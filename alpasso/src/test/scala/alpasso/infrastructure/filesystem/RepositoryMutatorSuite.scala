@@ -1,8 +1,6 @@
 package alpasso.infrastructure.filesystem
 
-import cats.data.StateT
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import cats.syntax.all.*
 import weaver.*
 import alpasso.domain.SecretName
@@ -13,7 +11,7 @@ import alpasso.shared.models.SemVer
 import java.nio.file.Paths
 
 object RepositoryMutatorSuite extends SimpleIOSuite {
-  
+
   test("RepositoryMutator create should create a new secret") { _ =>
     val secretName = SecretName.of("simple/name").toOption.get
     val recipient = Recipient.hex("7BC332CCA78CBA3917A3DA2CAFD637E1298147A3")
@@ -24,7 +22,6 @@ object RepositoryMutatorSuite extends SimpleIOSuite {
       version = SemVer.zero
     )
 
-    
     val cs = CypherService.gpg(recipient)
 
     val mutator = RepositoryMutator.make[IO](config, cs)
@@ -32,11 +29,8 @@ object RepositoryMutatorSuite extends SimpleIOSuite {
     val metadata = RawMetadata.of(Map("description" -> "Test secret"))
 
     mutator.create(secretName, metadata)
-      .runA(Some(RawSecretData.fromRaw("test-data".getBytes)))
-      .map { result =>
-        expect(result.isRight)
-      }
+      .runA(Some(RawSecretData.fromRaw("secret data".getBytes)))
+      .map(result => expect(result.isRight))
 
   }
-
 }

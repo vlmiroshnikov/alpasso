@@ -56,14 +56,14 @@ trait RepositoryReader[F[_]] derives ApplyK:
 
 object RepositoryReader:
 
-  def make[F[_]: { Async }](
+  def make[F[_]: {Sync}](
       config: RepositoryConfiguration,
       cs: CypherService[F]): RepositoryReader[F] =
     val gitted: RepositoryReader[Mid[F, *]] = Gitted[F](config.repoDir)
     val lcs: RepositoryReader[Mid[F, *]]    = CypheredStorage[F](cs)
     (gitted |+| lcs) attach Impl[F](config.repoDir)
 
-  class CypheredStorage[F[_]: { Async }](cs: CypherService[F]) extends RepositoryReader[Mid[F, *]] {
+  class CypheredStorage[F[_]: {Sync}](cs: CypherService[F]) extends RepositoryReader[Mid[F, *]] {
 
     override def loadPayload(
         secret: Secret[Path]): Mid[F, Result[Secret[RawSecretData]]] =
@@ -114,7 +114,7 @@ object RepositoryReader:
     override def walkTree: F[Result[Node[Branch[Secret[SecretPathEntries]]]]] =
       def mapBranch: Entry => Branch[Secret[SecretPathEntries]] =
         case Entry(dir, Chain.nil) => Branch.Node(dir)
-        case Entry(dir, files) =>
+        case Entry(dir, files)     =>
           (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
             case (Some(meta), Some(payload)) =>
               val name = SecretName.of(repoDir.relativize(dir).toString).toOption.get // todo
@@ -160,8 +160,8 @@ end RepositoryReader
 case class Entry(path: Path, files: Chain[Path] = Chain.nil)
 
 def walkFileTree(root: Path, exceptDir: Path => Boolean): Node[Entry] =
-  val stub  = Node(Entry(Paths.get(".")))
-  val stack = mutable.Stack[Node[Entry]](stub)
+  val stub                       = Node(Entry(Paths.get(".")))
+  val stack                      = mutable.Stack[Node[Entry]](stub)
   val visitor: FileVisitor[Path] = new FileVisitor[Path]:
     override def preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult =
       if exceptDir(dir) then FileVisitResult.SKIP_SUBTREE
@@ -210,7 +210,7 @@ def cutTree[A](root: Node[Branch[A]], f: A => Boolean): Option[Node[Branch[A]]] 
 
 def mapBranch(repoRootDir: RepoRootDir): Entry => Branch[Secret[SecretPathEntries]] =
   case Entry(dir, Chain.nil) => Branch.Node(dir)
-  case Entry(dir, files) =>
+  case Entry(dir, files)     =>
     (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
       case (Some(meta), Some(payload)) =>
         val name = SecretName.of(dir.toString).toOption.get

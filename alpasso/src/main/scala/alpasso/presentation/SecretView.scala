@@ -22,7 +22,6 @@ object SecretView:
   given (
       using
       mode: SensitiveMode): Show[SecretView] = Show.show { s =>
-
     val secret = mode match
       case SensitiveMode.Show   => s.payload.getOrElse("")
       case SensitiveMode.Masked => s.payload.fold("")(_ => "*******")

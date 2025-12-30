@@ -93,7 +93,7 @@ object GitRepo:
 
     override def addRemote(name: String, url: String): F[Result[Unit]] =
       blocking:
-        val git = new Git(repository)
+        val git       = new Git(repository)
         val remoteAdd = git
           .remoteAdd()
           .setName(name)
@@ -102,7 +102,7 @@ object GitRepo:
         ().asRight
 
     override def pullRemote(): F[Result[Unit]] =
-      val pull = Process(Seq("git", "pull", "origin", "master"), repository.getWorkTree)
+      val pull   = Process(Seq("git", "pull", "origin", "master"), repository.getWorkTree)
       val result =
         for rcode <- blocking(pull.!(silentLogger("pull")))
         yield Either.cond(rcode == 0, (), GitError.SyncErr)

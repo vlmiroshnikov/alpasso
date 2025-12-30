@@ -57,7 +57,7 @@ object ArgParser:
   val add: Opts[Action] = Opts.subcommand("new", "Add new secret") {
     val name   = Opts.argument[String]("name").mapValidated(SecretName.of)
     val secret = Opts.argument[String]("secret").map(SecretPayload.fromString).orNone
-    val tags = Opts
+    val tags   = Opts
       .option[String]("meta", "k1=v1,k2=v2")
       .mapValidated[SecretMetadata](SecretMetadata.fromRaw)
       .orNone
@@ -68,7 +68,7 @@ object ArgParser:
   val patch: Opts[Action] = Opts.subcommand("patch", "Update existing secret") {
     val name   = Opts.argument[String]("name").mapValidated(SecretName.of)
     val secret = Opts.argument[String]("secret").map(SecretPayload.fromString).orNone
-    val tags = Opts
+    val tags   = Opts
       .option[String]("meta", "k1=v1,k2=v2")
       .mapValidated[SecretMetadata](SecretMetadata.fromRaw)
       .orNone
@@ -77,7 +77,7 @@ object ArgParser:
   }
 
   val list: Opts[Action] = Opts.subcommand("ls", "List secrets") {
-    val grep = Opts.option[String]("grep", "Grep expression").map(SecretFilter.Grep.apply).orNone
+    val grep   = Opts.option[String]("grep", "Grep expression").map(SecretFilter.Grep.apply).orNone
     val output = Opts
       .option[String]("output", "Table | Tree", "o")
       .map(s => OutputFormat.withNameInvariant(s).getOrElse(OutputFormat.Tree))

@@ -15,7 +15,7 @@ object SecretMetadata:
 
   def fromRaw(s: String): ValidatedNel[String, SecretMetadata] =
     val items = s.split(",").toList
-    val tags = items.flatMap { m =>
+    val tags  = items.flatMap { m =>
       m.split('=').toList match
         case head :: tail :: Nil => (head, tail).some
         case _                   => None

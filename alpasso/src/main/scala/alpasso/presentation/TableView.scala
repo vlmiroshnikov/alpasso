@@ -17,8 +17,8 @@ object TableView:
       using
       mode: SensitiveMode): Show[TableView] = Show.show { tab =>
     val rows = tab.rows.zipWithIndex
-    val rw = rows.map { r =>
-      val tags = r._1.metadata.fold("")(_.show)
+    val rw   = rows.map { r =>
+      val tags   = r._1.metadata.fold("")(_.show)
       val secret = mode match
         case SensitiveMode.Show   => r._1.payload.getOrElse("")
         case SensitiveMode.Masked => "*******"

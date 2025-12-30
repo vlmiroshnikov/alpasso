@@ -26,7 +26,6 @@ object HistoryLogView:
   private val fmt = DateTimeFormatter.ISO_INSTANT
 
   given Show[HistoryLogView] = Show.show { commits =>
-
     val rw = commits.map { r =>
       f"|${r.hex}%20s | ${BLUE}${fmt.format(r.time)}%20s${RESET} | ${GREEN}${r.comment}%-40s${RESET}|"
     }

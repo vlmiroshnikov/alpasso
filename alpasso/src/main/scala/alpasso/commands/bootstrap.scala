@@ -11,7 +11,7 @@ import alpasso.shared.errors.*
 import alpasso.shared.models.{ Result, SemVer }
 import alpasso.shared.syntax.*
 
-def bootstrap[F[_]: { Sync }](
+def bootstrap[F[_]: {Sync}](
     repoDir: Path,
     version: SemVer,
     cypher: CypherAlg): F[Result[StorageView]] =

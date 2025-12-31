@@ -55,6 +55,8 @@ object Command:
       mutator: RepositoryMutator[StateF[F, *]])
       extends Command[F]:
 
+    import RepositoryMutator.State
+
     private def load(s: Secret[SecretPathEntries]) =
       reader.loadFully(s).liftE[Err].nested.map((d, m) => (d.into(), m.into())).value
 
@@ -91,7 +93,7 @@ object Command:
       val result =
         for locations <- mutator
                            .create(name, rmd)
-                           .runA(RawSecretData.fromRaw(payload.rawData).some)
+                           .runA(State.Plain(RawSecretData.fromRaw(payload.rawData)))
                            .liftE[Err]
         yield SecretView(name, None, meta.map(_.into()))
 
@@ -100,7 +102,7 @@ object Command:
     override def remove(name: SecretName): F[Result[SecretView]] =
       val result = for
         _ <- lookup(name)
-        _ <- mutator.remove(name).runA(None).liftE[Err]
+        _ <- mutator.remove(name).runA(State.Empty).liftE[Err]
       yield SecretView(name, None, None)
 
       result.value
@@ -117,7 +119,7 @@ object Command:
           rsd = payload.map(_.rawData).getOrElse(toUpdate.payload._1.byteArray)
           rmd = meta.map(RawMetadata.from).getOrElse(toUpdate.payload._2)
 
-          _ <- mutator.update(name, rmd).runA(RawSecretData.fromRaw(rsd).some).liftE[Err]
+          _ <- mutator.update(name, rmd).runA(State.Plain(RawSecretData.fromRaw(rsd))).liftE[Err]
 
           upd <- lookup(name) >>= load
         yield SecretView(name, new String(upd.payload._1.rawData).some, Some(upd.payload._2.into()))

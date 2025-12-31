@@ -12,6 +12,9 @@ import cats.effect.*
 import cats.syntax.all.*
 import cats.tagless.*
 
+import tofu.higherKind.*
+import tofu.higherKind.Mid.*
+
 import alpasso.domain.{ Secret, SecretName }
 import alpasso.infrastructure.cypher.{ CypherErr, CypherService }
 import alpasso.infrastructure.filesystem.models.*
@@ -21,8 +24,6 @@ import alpasso.shared.syntax.*
 
 import glass.Upcast
 import io.circe.*
-import tofu.higherKind.*
-import tofu.higherKind.Mid.*
 
 enum RepositoryErr:
   case AlreadyExists(name: SecretName)
@@ -30,7 +31,7 @@ enum RepositoryErr:
   case Corrupted(name: SecretName)
   case Inconsistent(name: String)
   case CypherError
-
+  case IOError(cause: Option[String])
   case Undefiled
 
 object RepositoryErr:

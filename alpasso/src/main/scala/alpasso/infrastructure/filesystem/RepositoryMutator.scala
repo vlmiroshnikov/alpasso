@@ -10,14 +10,15 @@ import cats.effect.std.Console
 import cats.syntax.all.*
 import cats.tagless.*
 
+import tofu.higherKind.*
+import tofu.higherKind.Mid.*
+
 import alpasso.domain.*
 import alpasso.infrastructure.cypher.CypherService
+import alpasso.infrastructure.filesystem.RepositoryMutator.State.Plain
 import alpasso.infrastructure.filesystem.models.*
 import alpasso.infrastructure.git.GitRepo
 import alpasso.shared.syntax.*
-
-import tofu.higherKind.*
-import tofu.higherKind.Mid.*
 
 case class RawData(data: RawSecretData, meta: RawMetadata)
 
@@ -35,7 +36,11 @@ trait RepositoryMutator[F[_]] derives ApplyK:
 
 object RepositoryMutator:
 
-  type State           = Option[RawSecretData]
+  enum State:
+    case Plain(data: RawSecretData)
+    case Encrypted(data: RawSecretData)
+    case Empty
+
   type StateF[F[_], A] = StateT[F, State, A]
 
   def make[F[_]: {Sync, Console}](
@@ -55,14 +60,15 @@ object RepositoryMutator:
     override def remove(name: SecretName): StateF[F, Result[Unit]] =
       val p = SecretPathEntries.from(repoDir, name)
 
-      pathExists(p.payload).flatMap { rootExists =>
+      StateT.liftF(pathExists(p.payload)).flatMap { rootExists =>
         if !rootExists then StateT.pure(RepositoryErr.NotFound(name).asLeft)
         else
-          for
+          val remove = for
             _ <- deleteIfExists(p.meta)
             _ <- deleteIfExists(p.payload)
             _ <- deleteIfExists(p.root)
-          yield ().asRight[RepositoryErr]
+          yield ()
+          StateT.liftF(remove.attempt.map(_.leftMap(e => RepositoryErr.IOError(e.getMessage.some))))
       }
 
     override def create(
@@ -70,15 +76,22 @@ object RepositoryMutator:
         meta: RawMetadata): StateF[F, Result[Unit]] =
       val p = SecretPathEntries.from(repoDir, name)
 
-      checkSecretExists(p).flatMap { rootExists =>
+      StateT.liftF(checkSecretExists(p)).flatMap { rootExists =>
         if rootExists then StateT.pure(RepositoryErr.AlreadyExists(name).asLeft)
         else
-          for
-            _          <- createDirectories(p.root)
-            encodedOpt <- StateT.get[F, State]
-            _ <- write(p.payload, encodedOpt.getOrElse(RawSecretData.empty).byteArray, CreateOps)
-            _ <- writeString(p.meta, meta.rawString, CreateOps)
-          yield ().asRight
+          StateT.get[F, State].flatMap {
+            case State.Encrypted(data) =>
+              val store = for
+                _ <- createDirectories(p.root)
+                _ <- write(p.payload, data.byteArray, CreateOps)
+                _ <- writeString(p.meta, meta.rawString, CreateOps)
+              yield ()
+
+              StateT.liftF(
+                store.attempt.map(_.leftMap(e => RepositoryErr.IOError(e.getMessage.some)))
+              )
+            case _ => StateT.pure(RepositoryErr.CypherError.asLeft)
+          }
       }
 
     override def update(
@@ -87,14 +100,20 @@ object RepositoryMutator:
 
       val p = SecretPathEntries.from(repoDir, name)
 
-      checkSecretExists(p).flatMap { rootExists =>
+      StateT.liftF(checkSecretExists(p)).flatMap { rootExists =>
         if rootExists then StateT.pure(RepositoryErr.Corrupted(name).asLeft)
         else
-          for
-            encodedOpt <- StateT.get[F, State]
-            _ <- write(p.payload, encodedOpt.getOrElse(RawSecretData.empty).byteArray, UpdateOps)
-            _ <- writeString(p.meta, metadata.rawString, UpdateOps)
-          yield ().asRight
+          StateT.get[F, State].flatMap {
+            case State.Encrypted(data) =>
+              val update = for
+                _ <- write(p.payload, data.byteArray, UpdateOps)
+                _ <- writeString(p.meta, metadata.rawString, UpdateOps)
+              yield ()
+              StateT.liftF(
+                update.attempt.map(_.leftMap(e => RepositoryErr.IOError(e.getMessage.some)))
+              )
+            case _ => StateT.pure(RepositoryErr.Undefiled.asLeft)
+          }
       }
   }
 
@@ -103,7 +122,11 @@ object RepositoryMutator:
 
     private def encrypt(state: State): EitherT[F, RepositoryErr, RawSecretData] =
       for
-        rsd <- EitherT.fromOption(state, RepositoryErr.CypherError)
+        rsd <- EitherT.fromEither {
+                 state match
+                   case Plain(data) => data.asRight
+                   case _           => RepositoryErr.Undefiled.asLeft
+               }
         raw <- cs.encrypt(rsd.byteArray).liftE[RepositoryErr]
       yield RawSecretData.fromRaw(raw)
 
@@ -112,9 +135,8 @@ object RepositoryMutator:
         for
           state  <- StateT.get[F, State]
           encRes <- StateT.liftF(encrypt(state).value)
-          _      <- StateT.liftF(Console[F].println(s"Enc: ${encRes}"))
           res    <- encRes.fold(err => StateT.pure(err.asLeft),
-                             enc => StateT.set[F, State](enc.some) *> action
+                             enc => StateT.set[F, State](State.Encrypted(enc)) *> action
                  )
         yield res
       }
@@ -122,16 +144,14 @@ object RepositoryMutator:
     override def update(
         name: SecretName,
         meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] =
-      action => {
+      action =>
         for
           state  <- StateT.get[F, State]
           encRes <- StateT.liftF(encrypt(state).value)
-          _      <- StateT.liftF(Console[F].println(s"Enc: ${encRes}"))
           res    <- encRes.fold(err => StateT.pure(err.asLeft),
-                             enc => StateT.set[F, State](enc.some) *> action
+                             enc => StateT.set[F, State](State.Encrypted(enc)) *> action
                  )
         yield res
-      }
 
     override def remove(name: SecretName): Mid[StateF[F, *], Result[Unit]] = identity
 
@@ -142,10 +162,10 @@ object RepositoryMutator:
     override def create(name: SecretName, meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] =
       action => {
         for
-          _                 <- StateT.liftF(Out.println(s"Creating secret: $name"))
-          res: Result[Unit] <- action
-          _                 <- StateT.liftF(Out.println(s"Creating secret: $name, ${res}"))
-          _                 <- StateT.liftF(
+          _   <- StateT.liftF(Out.println(s"Creating secret: $name"))
+          res <- action
+          _   <- StateT.liftF(Out.println(s"Creating secret: $name, ${res}"))
+          _   <- StateT.liftF(
                  res.fold(err => Out.println(s"Failed to create secret [$name]: $err"),
                           _ => Out.println(s"Secret created: $name")
                  )

@@ -9,6 +9,9 @@ import cats.effect.std.Console
 import cats.syntax.all.*
 import cats.tagless.*
 
+import tofu.higherKind.*
+import tofu.higherKind.Mid.*
+
 import alpasso.infrastructure.cypher.{ CypherAlg, CypherService }
 import alpasso.infrastructure.git.GitRepo
 import alpasso.shared.models.SemVer
@@ -16,8 +19,6 @@ import alpasso.shared.models.SemVer
 import io.circe.*
 import io.circe.derivation.*
 import io.circe.syntax.given
-import tofu.higherKind.*
-import tofu.higherKind.Mid.*
 
 object PersistentModels:
   given Configuration = Configuration.default.withSnakeCaseMemberNames

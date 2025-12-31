@@ -13,7 +13,7 @@ import cats.syntax.all.*
 import cats.tagless.*
 
 import alpasso.domain.{ Secret, SecretName }
-import alpasso.infrastructure.cypher.{ CypherError, CypherService }
+import alpasso.infrastructure.cypher.{ CypherErr, CypherService }
 import alpasso.infrastructure.filesystem.models.*
 import alpasso.infrastructure.git.{ GitError, GitRepo }
 import alpasso.shared.models.*
@@ -29,12 +29,13 @@ enum RepositoryErr:
   case NotFound(name: SecretName)
   case Corrupted(name: SecretName)
   case Inconsistent(name: String)
+  case CypherError
 
   case Undefiled
 
 object RepositoryErr:
-  given Upcast[RepositoryErr, GitError]    = fromGitError
-  given Upcast[RepositoryErr, CypherError] = _ => RepositoryErr.Inconsistent("Invalid cypher")
+  given Upcast[RepositoryErr, GitError]  = fromGitError
+  given Upcast[RepositoryErr, CypherErr] = _ => RepositoryErr.CypherError
 
   def fromGitError(ge: GitError): RepositoryErr =
     ge match

@@ -9,10 +9,10 @@ import cats.data.EitherT
 import cats.effect.*
 import cats.syntax.all.*
 
-enum CypherError:
+enum CypherErr:
   case InvalidCypher
 
-type Result[A] = Either[CypherError, A]
+type Result[A] = Either[CypherErr, A]
 
 trait CypherService[F[_]]:
   def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]]
@@ -20,7 +20,7 @@ trait CypherService[F[_]]:
 
 object CypherService:
 
-  private class GpgImpl[F[_]: Sync as S](fg: Recipient) extends CypherService[F]:
+  private class GpgImpl[F[_]: {Sync as S}](fg: Recipient) extends CypherService[F]:
 
     import S.blocking
 
@@ -34,8 +34,10 @@ object CypherService:
         Process("gpg", Seq("--encrypt", "--quiet", "--recipient", fg, "--armor")) #< bis #> bos
 
       val result =
-        for rcode <- blocking(encrypt.!(silentLogger))
-        yield Either.cond(rcode == 0, bos.toByteArray, CypherError.InvalidCypher)
+        for
+          rcode <- blocking(encrypt.!(silentLogger))
+          _     <- blocking(println(s" ${encrypt.toString}  errorcode = ${rcode}"))
+        yield Either.cond(rcode == 0, bos.toByteArray, CypherErr.InvalidCypher)
 
       EitherT(result).value
 
@@ -47,7 +49,7 @@ object CypherService:
 
       val result =
         for rcode <- blocking(decrypt.!(silentLogger))
-        yield Either.cond(rcode == 0, bos.toByteArray, CypherError.InvalidCypher)
+        yield Either.cond(rcode == 0, bos.toByteArray, CypherErr.InvalidCypher)
 
       EitherT(result).value
 

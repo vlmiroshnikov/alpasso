@@ -34,7 +34,7 @@ object errors:
       case InvalidFormat(path)  => Err.StorageCorrupted(path)
 
     given Upcast[Err, ProvisionErr] = e => Err.RepositoryProvisionErr(e)
-    given Upcast[Err, CypherError]  = e => Err.SecretRepoErr(e.upcast)
+    given Upcast[Err, CypherErr]    = e => Err.SecretRepoErr(e.upcast)
 
     given Upcast[Err, GitError] =
       ge => summon[Upcast[Err, RepositoryErr]].upcast(fromGitError(ge)) // todo fix it

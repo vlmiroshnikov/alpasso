@@ -98,15 +98,24 @@ object RepositoryMutator:
       }
   }
 
-  class Crypted[F[_]: Sync](cs: CypherService[F]) extends RepositoryMutator[Mid[StateF[F, *], *]] {
+  class Crypted[F[_]: {Sync, Console}](cs: CypherService[F])
+      extends RepositoryMutator[Mid[StateF[F, *], *]] {
+
+    private def encrypt(state: State): EitherT[F, RepositoryErr, RawSecretData] =
+      for
+        rsd <- EitherT.fromOption(state, RepositoryErr.CypherError)
+        raw <- cs.encrypt(rsd.byteArray).liftE[RepositoryErr]
+      yield RawSecretData.fromRaw(raw)
 
     override def create(name: SecretName, meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] =
       action => {
         for
-          st  <- StateT.get[F, State]
-          enc <- StateT.liftF(cs.encrypt(st.get.byteArray).liftE[RepositoryErr].value)
-          _   <- StateT.set[F, State](enc.toOption.map(RawSecretData.fromRaw))
-          res <- action
+          state  <- StateT.get[F, State]
+          encRes <- StateT.liftF(encrypt(state).value)
+          _      <- StateT.liftF(Console[F].println(s"Enc: ${encRes}"))
+          res    <- encRes.fold(err => StateT.pure(err.asLeft),
+                             enc => StateT.set[F, State](enc.some) *> action
+                 )
         yield res
       }
 
@@ -115,10 +124,12 @@ object RepositoryMutator:
         meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] =
       action => {
         for
-          st  <- StateT.get[F, State]
-          enc <- StateT.liftF(cs.encrypt(st.get.byteArray).liftE[RepositoryErr].value)
-          _   <- StateT.set[F, State](enc.toOption.map(RawSecretData.fromRaw))
-          res <- action
+          state  <- StateT.get[F, State]
+          encRes <- StateT.liftF(encrypt(state).value)
+          _      <- StateT.liftF(Console[F].println(s"Enc: ${encRes}"))
+          res    <- encRes.fold(err => StateT.pure(err.asLeft),
+                             enc => StateT.set[F, State](enc.some) *> action
+                 )
         yield res
       }
 
@@ -133,6 +144,7 @@ object RepositoryMutator:
         for
           _                 <- StateT.liftF(Out.println(s"Creating secret: $name"))
           res: Result[Unit] <- action
+          _                 <- StateT.liftF(Out.println(s"Creating secret: $name, ${res}"))
           _                 <- StateT.liftF(
                  res.fold(err => Out.println(s"Failed to create secret [$name]: $err"),
                           _ => Out.println(s"Secret created: $name")

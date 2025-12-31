@@ -14,7 +14,7 @@ object RepositoryMutatorSuite extends SimpleIOSuite {
 
   test("RepositoryMutator create should create a new secret") { _ =>
     val secretName = SecretName.of("simple/name").toOption.get
-    val recipient = Recipient.hex("7BC332CCA78CBA3917A3DA2CAFD637E1298147A3")
+    val recipient = Recipient.hex("64695F7D212F979D3553AFC5E0D6CE10FBEB0423")
 
     val config = RepositoryConfiguration(
       repoDir = genRootDir("secrets"),

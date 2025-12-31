@@ -1,14 +1,14 @@
 package alpasso.infrastructure.filesystem
 
+import java.nio.file.Files
 import cats.effect.IO
 import cats.syntax.all.*
 import weaver.*
 import alpasso.domain.SecretName
 import alpasso.infrastructure.cypher.{CypherAlg, CypherService, Recipient}
+import alpasso.infrastructure.filesystem.PersistentModels.RepositoryMetaConfig
 import alpasso.infrastructure.filesystem.models.*
 import alpasso.shared.models.SemVer
-
-import java.nio.file.Paths
 
 object RepositoryMutatorSuite extends SimpleIOSuite {
 
@@ -17,10 +17,12 @@ object RepositoryMutatorSuite extends SimpleIOSuite {
     val recipient = Recipient.hex("7BC332CCA78CBA3917A3DA2CAFD637E1298147A3")
 
     val config = RepositoryConfiguration(
-      repoDir = RepoRootDir.fromPath(Paths.get(".tmp").toAbsolutePath).toOption.get,
+      repoDir = genRootDir("secrets"),
       cypherAlg = CypherAlg.Gpg(recipient),
       version = SemVer.zero
     )
+
+    val provisioner = RepositoryProvisioner.make(config.repoDir)
 
     val cs = CypherService.gpg(recipient)
 
@@ -28,9 +30,16 @@ object RepositoryMutatorSuite extends SimpleIOSuite {
 
     val metadata = RawMetadata.of(Map("description" -> "Test secret"))
 
+    val metaConfig = RepositoryMetaConfig(config.version, config.cypherAlg)
+
+    provisioner.provision(metaConfig) *>
     mutator.create(secretName, metadata)
       .runA(Some(RawSecretData.fromRaw("secret data".getBytes)))
       .map(result => expect(result.isRight))
 
   }
 }
+
+def genRootDir(tail: String): RepoRootDir =
+  val randomDir = Files.createTempDirectory("alpasso_test_")
+  RepoRootDir.fromPath(randomDir.toAbsolutePath.resolve(tail)).toOption.get

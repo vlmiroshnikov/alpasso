@@ -3,6 +3,7 @@ package alpasso.commands
 import java.nio.file.Path
 
 import cats.effect.*
+import cats.effect.std.Console
 
 import alpasso.infrastructure.cypher.CypherAlg
 import alpasso.infrastructure.filesystem.{ PersistentModels, RepositoryProvisioner }
@@ -11,7 +12,7 @@ import alpasso.shared.errors.*
 import alpasso.shared.models.{ Result, SemVer }
 import alpasso.shared.syntax.*
 
-def bootstrap[F[_]: {Sync}](
+def bootstrap[F[_]: {Sync, Console}](
     repoDir: Path,
     version: SemVer,
     cypher: CypherAlg): F[Result[StorageView]] =

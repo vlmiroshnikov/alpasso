@@ -5,6 +5,7 @@ import java.nio.file.{ Files, Path, StandardOpenOption }
 import cats.*
 import cats.data.*
 import cats.effect.*
+import cats.effect.std.Console
 import cats.syntax.all.*
 import cats.tagless.*
 
@@ -41,11 +42,11 @@ object RepositoryProvisioner:
 
   val repoMetadataFile: String = ".alpasso"
 
-  def make[F[_]: {Sync}](repoDir: Path): Provisioner[F] =
+  def make[F[_]: {Sync, Console}](repoDir: Path): Provisioner[F] =
     val alg = MetaProvisioner(repoDir)
 
     val gitted: Provisioner[Mid[F, *]] = GitProvisioner[F](repoDir)
-    val logged: Provisioner[Mid[F, *]] = LoggingProvisioner[F]
+    val logged: Provisioner[Mid[F, *]] = LoggingProvisioner[F](repoDir)
     val cs: Provisioner[Mid[F, *]]     = CypherProvisioner[F]
 
     (cs |+| gitted |+| logged) attach alg
@@ -79,15 +80,15 @@ object RepositoryProvisioner:
       }
   }
 
-  class LoggingProvisioner[F[_]: Sync as F] extends Provisioner[Mid[F, *]]:
-    import F.blocking
+  class LoggingProvisioner[F[_]: {Monad, Console as Out}](repoDir: Path)
+      extends Provisioner[Mid[F, *]]:
 
     override def provision(config: RepositoryMetaConfig): Mid[F, Either[ProvisionErr, Unit]] =
       action =>
-        blocking(println("start provisioning")) *>
+        Out.println("start provisioning") *>
           action.flatTap {
-            case Left(e)  => blocking(println(s"Failed provisioning ${e}"))
-            case Right(_) => blocking(println("Provisioning completed"))
+            case Left(e)  => Out.println(s"Failed provisioning ${e}")
+            case Right(_) => Out.println(s"Provisioning completed ${repoDir}")
           }
 
   class MetaProvisioner[F[_]: Sync as F](repoDir: Path) extends Provisioner[F]:

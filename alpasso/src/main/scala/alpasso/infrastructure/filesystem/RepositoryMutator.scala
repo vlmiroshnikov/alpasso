@@ -126,16 +126,16 @@ object RepositoryMutator:
 
   }
 
-  class Logging[F[_]: {Sync, Console as Con}] extends RepositoryMutator[Mid[StateF[F, *], *]] {
+  class Logging[F[_]: {Sync, Console as Out}] extends RepositoryMutator[Mid[StateF[F, *], *]] {
 
     override def create(name: SecretName, meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] =
       action => {
         for
-          _   <- StateT.liftF(Con.println(s"Creating secret: $name"))
-          res <- action
-          _   <- StateT.liftF(
-                 res.fold(_ => Con.println(s"Secret created: $name"),
-                          err => Con.println(s"Failed to create secret [$name]: $err")
+          _                 <- StateT.liftF(Out.println(s"Creating secret: $name"))
+          res: Result[Unit] <- action
+          _                 <- StateT.liftF(
+                 res.fold(err => Out.println(s"Failed to create secret [$name]: $err"),
+                          _ => Out.println(s"Secret created: $name")
                  )
                )
         yield res
@@ -144,11 +144,11 @@ object RepositoryMutator:
     override def update(name: SecretName, meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] =
       action => {
         for
-          _   <- StateT.liftF(Con.println(s"Updating secret: $name"))
+          _   <- StateT.liftF(Out.println(s"Updating secret: $name"))
           res <- action
           _   <- StateT.liftF(
-                 res.fold(_ => Con.println(s"Secret updated: $name"),
-                          err => Con.println(s"Failed to update secret [$name]: $err")
+                 res.fold(_ => Out.println(s"Secret updated: $name"),
+                          err => Out.println(s"Failed to update secret [$name]: $err")
                  )
                )
         yield res
@@ -157,11 +157,11 @@ object RepositoryMutator:
     override def remove(name: SecretName): Mid[StateF[F, *], Result[Unit]] =
       action => {
         for
-          _   <- StateT.liftF(Con.println(s"Removing secret: $name"))
+          _   <- StateT.liftF(Out.println(s"Removing secret: $name"))
           res <- action
           _   <- StateT.liftF(
-                 res.fold(_ => Con.println(s"Secret removed: $name"),
-                          err => Con.println(s"Failed to remove secret [$name]: $err")
+                 res.fold(_ => Out.println(s"Secret removed: $name"),
+                          err => Out.println(s"Failed to remove secret [$name]: $err")
                  )
                )
         yield res

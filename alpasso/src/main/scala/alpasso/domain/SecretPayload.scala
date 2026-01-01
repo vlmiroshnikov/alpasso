@@ -12,4 +12,4 @@ object SecretPayload:
   def fromRaw(data: Array[Byte]): SecretPayload = data
   def fromString(data: String): SecretPayload   = data.getBytes(utf8Charset)
 
-  extension (s: SecretPayload) def rawData: Array[Byte] = s
+  extension (s: SecretPayload) def byteArray: Array[Byte] = s

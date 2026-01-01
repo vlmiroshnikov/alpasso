@@ -128,7 +128,7 @@ object RepositoryMutator:
                    case _           => RepositoryErr.Undefiled.asLeft
                }
         raw <- cs.encrypt(rsd.byteArray).liftE[RepositoryErr]
-      yield RawSecretData.fromRaw(raw)
+      yield RawSecretData.fromBytes(raw)
 
     override def create(name: SecretName, meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] =
       action => {

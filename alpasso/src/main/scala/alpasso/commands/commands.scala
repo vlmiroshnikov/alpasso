@@ -110,7 +110,7 @@ object Command:
       val result =
         for locations <- mutator
                            .create(name, rmd)
-                           .runA(State.Plain(RawSecretData.fromRaw(payload.rawData)))
+                           .runA(State.Plain(RawSecretData.fromBytes(payload.byteArray)))
                            .liftE[Err]
         yield SecretView(name, None, meta.map(_.into()))
 
@@ -133,13 +133,13 @@ object Command:
           locations <- lookup(name)
           toUpdate  <- reader.loadFully(locations).liftE[Err]
 
-          rsd = payload.map(_.rawData).getOrElse(toUpdate.payload._1.byteArray)
+          rsd = payload.map(_.byteArray).getOrElse(toUpdate.payload._1.byteArray)
           rmd = meta.map(RawMetadata.from).getOrElse(toUpdate.payload._2)
 
-          _ <- mutator.update(name, rmd).runA(State.Plain(RawSecretData.fromRaw(rsd))).liftE[Err]
+          _ <- mutator.update(name, rmd).runA(State.Plain(RawSecretData.fromBytes(rsd))).liftE[Err]
 
           upd <- lookup(name) >>= load
-        yield SecretView(name, new String(upd.payload._1.rawData).some, Some(upd.payload._2.into()))
+        yield SecretView(name, new String(upd.payload._1.byteArray).some, Some(upd.payload._2.into()))
 
       result.value
 end Command

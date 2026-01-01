@@ -73,7 +73,7 @@ object RepositoryReader:
         (for
           d <- EitherT(action)
           r <- cs.decrypt(d.payload.byteArray).liftE[RepositoryErr]
-        yield d.copy(payload = RawSecretData.fromRaw(r))).value
+        yield d.copy(payload = RawSecretData.fromBytes(r))).value
 
     override def loadMeta(secret: Secret[MetaPath]): Mid[F, PackResult[RawMetadata]] =
       identity
@@ -84,7 +84,7 @@ object RepositoryReader:
         (for
           d <- EitherT(action)
           r <- cs.decrypt(d.payload._1.byteArray).liftE[RepositoryErr]
-        yield d.copy(payload = (RawSecretData.fromRaw(r), d.payload._2))).value
+        yield d.copy(payload = (RawSecretData.fromBytes(r), d.payload._2))).value
 
     override def walkTree: Mid[F, Result[Node[Branch[Secret[SecretPathEntries]]]]] =
       identity
@@ -154,7 +154,7 @@ object RepositoryReader:
         if !exists then RepositoryErr.Corrupted(secret.name).asLeft[Secret[RawSecretData]].pure[F]
         else
           for raw <- blocking(Files.readAllBytes(path))
-          yield Secret(secret.name, RawSecretData.fromRaw(raw)).asRight
+          yield Secret(secret.name, RawSecretData.fromBytes(raw)).asRight
       }
 
 end RepositoryReader

@@ -15,7 +15,7 @@ case class SecretView(
     metadata: Option[SimpleMetadataView])
 
 given Converter[Package, SecretView] =
-  rp => SecretView(rp.name, new String(rp.payload._1.rawData).some, rp.payload._2.into().some)
+  rp => SecretView(rp.name, new String(rp.payload._1.byteArray).some, rp.payload._2.into().some)
 
 object SecretView:
 

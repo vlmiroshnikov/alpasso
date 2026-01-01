@@ -4,7 +4,7 @@ import java.nio.file.Path
 
 import alpasso.infrastructure.cypher.*
 import alpasso.infrastructure.filesystem.*
-import alpasso.infrastructure.filesystem.RepoMetaErr.{ InvalidFormat, NotInitialized }
+import alpasso.infrastructure.filesystem.RepositoryConfigErr.{ Corrupted, NotInitialized }
 import alpasso.infrastructure.filesystem.RepositoryErr.fromGitError
 import alpasso.infrastructure.git.GitError
 import alpasso.shared.models.SemVer
@@ -29,9 +29,9 @@ object errors:
   object Err:
     given Upcast[Err, RepositoryErr] = Err.SecretRepoErr(_)
 
-    given Upcast[Err, RepoMetaErr] =
+    given Upcast[Err, RepositoryConfigErr] =
       case NotInitialized(path) => Err.StorageNotInitialized(path)
-      case InvalidFormat(path)  => Err.StorageCorrupted(path)
+      case Corrupted(path)      => Err.StorageCorrupted(path)
 
     given Upcast[Err, ProvisionErr] = e => Err.RepositoryProvisionErr(e)
     given Upcast[Err, CypherErr]    = e => Err.SecretRepoErr(e.upcast)

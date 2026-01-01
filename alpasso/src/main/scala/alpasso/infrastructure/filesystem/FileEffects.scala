@@ -23,6 +23,9 @@ object FileEffects:
   def write[F[_]: Sync](path: Path, data: Array[Byte], options: List[OpenOption]): F[Path] =
     Sync[F].blocking(Files.write(path, data, options*))
 
+  def readString[F[_]: Sync](path: Path): F[String] =
+    Sync[F].blocking(Files.readString(path))
+
   def writeString[F[_]: Sync](
       path: Path,
       content: String,

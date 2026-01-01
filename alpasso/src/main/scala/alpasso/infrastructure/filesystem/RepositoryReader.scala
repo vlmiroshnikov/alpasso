@@ -51,8 +51,8 @@ type Result[+T]    = Either[RepositoryErr, T]
 type PackResult[T] = Result[Secret[T]]
 
 trait RepositoryReader[F[_]] derives ApplyK:
-  def loadPayload(secret: Secret[Path]): F[PackResult[RawSecretData]]
-  def loadMeta(secret: Secret[Path]): F[PackResult[RawMetadata]]
+  def loadPayload(secret: Secret[PayloadPath]): F[PackResult[RawSecretData]]
+  def loadMeta(secret: Secret[MetaPath]): F[PackResult[RawMetadata]]
   def loadFully(path: Secret[SecretPathEntries]): F[PackResult[(RawSecretData, RawMetadata)]]
   def walkTree: F[Result[Node[Branch[Secret[SecretPathEntries]]]]]
 
@@ -68,14 +68,14 @@ object RepositoryReader:
   class CypheredStorage[F[_]: {Sync}](cs: CypherService[F]) extends RepositoryReader[Mid[F, *]] {
 
     override def loadPayload(
-        secret: Secret[Path]): Mid[F, Result[Secret[RawSecretData]]] =
+        secret: Secret[PayloadPath]): Mid[F, Result[Secret[RawSecretData]]] =
       action =>
         (for
           d <- EitherT(action)
           r <- cs.decrypt(d.payload.byteArray).liftE[RepositoryErr]
         yield d.copy(payload = RawSecretData.fromRaw(r))).value
 
-    override def loadMeta(secret: Secret[Path]): Mid[F, PackResult[RawMetadata]] =
+    override def loadMeta(secret: Secret[MetaPath]): Mid[F, PackResult[RawMetadata]] =
       identity
 
     override def loadFully(
@@ -95,10 +95,10 @@ object RepositoryReader:
     private val verifyGitRepo: EitherT[F, RepositoryErr, Unit] =
       GitRepo.openExists(repoDir).use(_.verify).liftE[RepositoryErr]
 
-    override def loadPayload(secret: Secret[Path]): Mid[F, PackResult[RawSecretData]] =
+    override def loadPayload(secret: Secret[PayloadPath]): Mid[F, PackResult[RawSecretData]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
-    override def loadMeta(secret: Secret[Path]): Mid[F, PackResult[RawMetadata]] =
+    override def loadMeta(secret: Secret[MetaPath]): Mid[F, PackResult[RawMetadata]] =
       action => verifyGitRepo.flatMapF(_ => action).value
 
     override def loadFully(
@@ -128,7 +128,7 @@ object RepositoryReader:
       for tree <- blocking(walkFileTree(repoDir, exceptDir))
       yield tree.traverse(v => Id(mapBranch(v))).asRight
 
-    override def loadMeta(secret: Secret[Path]): F[PackResult[RawMetadata]] =
+    override def loadMeta(secret: Secret[MetaPath]): F[PackResult[RawMetadata]] =
       val metaPath = secret.payload
 
       blocking(Files.exists(metaPath)).flatMap { exists =>
@@ -147,7 +147,7 @@ object RepositoryReader:
         m <- loadMeta(secret.map(_.meta))
       yield (p, m).mapN((a, b) => Secret(a.name, (a.payload, b.payload)))
 
-    override def loadPayload(secret: Secret[Path]): F[PackResult[RawSecretData]] =
+    override def loadPayload(secret: Secret[PayloadPath]): F[PackResult[RawSecretData]] =
       val path = secret.payload
 
       blocking(Files.exists(path)).flatMap { exists =>

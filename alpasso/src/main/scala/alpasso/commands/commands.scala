@@ -57,21 +57,38 @@ object Command:
 
     import RepositoryMutator.State
 
-    private def load(s: Secret[SecretPathEntries]) =
+    private def load(
+        s: Secret[SecretPathEntries]): EitherT[F, Err, Secret[(SecretPayload, SecretMetadata)]] =
       reader.loadFully(s).liftE[Err].nested.map((d, m) => (d.into(), m.into())).value
 
+    private def loadMeta(
+        s: Secret[
+          SecretPathEntries
+        ]): EitherT[F, Err, Secret[(SecretPathEntries, SecretMetadata)]] =
+      reader.loadMeta(s.map(_.meta)).liftE[Err].nested.map(m => (s.payload, m.into())).value
+
     override def filter(filter: SecretFilter): F[Result[Option[Node[Branch[SecretView]]]]] =
-      def predicate(p: Package): Boolean =
+      def predicate(p: Secret[(SecretPathEntries, SecretMetadata)]): Boolean =
         filter match
           case SecretFilter.Grep(pattern) =>
-            p.name.asPath.toString.contains(pattern)
+            p.name
+              .asPath
+              .toString
+              .contains(pattern) || p.payload._2.asMap.mkString.contains(pattern)
           case SecretFilter.Empty =>
             true
 
       val result = for
         rawTree <- reader.walkTree.liftE[Err]
-        tree    <- rawTree.traverse(_.traverse(load))
-      yield cutTree(tree, predicate).map(_.traverse(b => Id(b.map(_.into()))))
+        tree    <- rawTree.traverse(_.traverse(loadMeta))
+        cutted = cutTree(tree, predicate)
+        filledTree <- cutted match
+                        case Some(root) =>
+                          root
+                            .traverse(_.traverse(s => load(s.map(_._1))))
+                            .map(tree => tree.traverse(branch => Id(branch.map(_.into()))).some)
+                        case None => EitherT.pure(None)
+      yield filledTree
 
       result.value
 

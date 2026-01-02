@@ -40,8 +40,9 @@ object AlpassoApp extends IOApp:
         session <- EitherT.fromOptionF(smgr.current, Err.UseSwitchCommand)
         repoDir <- EitherT.fromOption(RepoRootDir.fromPath(session.path).toOption, Err.InternalErr)
         cfg     <- rmr.read(session.path).liftE[Err]
-        _       <- EitherT.cond(cfg.version == SemVer.current, (), Err.VersionMismatch(cfg.version))
-        result  <- f(RepositoryConfiguration(repoDir, cfg.version, cfg.cryptoAlg)).liftE[Err]
+        current = SemVer.current.getOrElse(SemVer.zero)
+        _      <- EitherT.cond(cfg.version == current, (), Err.VersionMismatch(cfg.version))
+        result <- f(RepositoryConfiguration(repoDir, cfg.version, cfg.cryptoAlg)).liftE[Err]
       yield result).value
 
     def provideCommand[A](f: Command[IO] => IO[Result[A]]): IO[Result[A]] =
@@ -55,7 +56,7 @@ object AlpassoApp extends IOApp:
         ops match
           case RepoOp.Init(pathOpt, cypher) =>
             val path = pathOpt.toAbsolutePath
-            val boot = bootstrap[IO](path, SemVer.current, cypher)
+            val boot = bootstrap[IO](path, SemVer.current.getOrElse(SemVer.zero), cypher)
               .flatTap(_.fold(_ => IO.unit, _ => smgr.setup(Session(path))))
             boot >>= handle
 

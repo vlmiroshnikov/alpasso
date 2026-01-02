@@ -117,9 +117,9 @@ object RepositoryReader:
       def mapBranch: Entry => Branch[Secret[SecretPathEntries]] =
         case Entry(dir, Chain.nil) => Branch.Node(dir)
         case Entry(dir, files)     =>
-          (files.find(_.endsWith("meta")), files.find(_.endsWith("payload"))) match
-            case (Some(meta), Some(payload)) =>
-              val name = SecretName.of(repoDir.relativize(dir).toString).toOption.get // todo
+          val nameOpt = SecretName.of(repoDir.relativize(dir).toString).toOption
+          (files.find(_.endsWith("meta")), files.find(_.endsWith("payload")), nameOpt) match
+            case (Some(meta), Some(payload), Some(name)) =>
               Branch.Leaf(dir, Secret(name, SecretPathEntries.from(repoDir, name)))
             case _ => Branch.Node(dir)
 

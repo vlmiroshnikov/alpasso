@@ -10,7 +10,7 @@ case class SemVer(major: Int, minor: Int, patch: Int)
 object SemVer:
   val zero: SemVer = SemVer(0, 0, 0)
 
-  def current: SemVer = fromString(BuildInfo.version).toOption.get
+  def current: Option[SemVer] = fromString(BuildInfo.version).toOption
 
   given Show[SemVer]    = Show.show(v => s"${v.major}.${v.minor}.${v.patch}")
   given Encoder[SemVer] = Encoder.encodeString.contramap(v => s"${v.major}.${v.minor}.${v.patch}")

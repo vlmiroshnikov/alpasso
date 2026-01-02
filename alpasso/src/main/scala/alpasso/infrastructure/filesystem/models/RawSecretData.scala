@@ -1,9 +1,9 @@
 package alpasso.infrastructure.filesystem.models
 
-import cats.{Eq, Show}
+import cats.*
+
 import alpasso.domain.SecretPayload
 import alpasso.shared.models.Converter
-import cats.syntax.all.*
 
 opaque type RawSecretData = Array[Byte]
 

@@ -17,8 +17,10 @@ import alpasso.domain.*
 import alpasso.infrastructure.cypher.CypherService
 import alpasso.infrastructure.filesystem.RepositoryMutator.State.Plain
 import alpasso.infrastructure.filesystem.models.*
-import alpasso.infrastructure.git.GitRepo
+import alpasso.infrastructure.git.{ GitError, GitRepo }
 import alpasso.shared.syntax.*
+
+import org.eclipse.jgit.revwalk.RevCommit
 
 case class RawData(data: RawSecretData, meta: RawMetadata)
 
@@ -202,60 +204,38 @@ object RepositoryMutator:
 
   class Gitted[F[_]: Sync](repoDir: RepoRootDir) extends RepositoryMutator[Mid[StateF[F, *], *]] {
 
+    private def withGitCommit(
+        gitOp: GitRepo[F] => F[Either[GitError, RevCommit]]): Mid[StateF[F, *], Result[Unit]] =
+      action =>
+        val r = for
+          st <- action.toEitherT
+          _  <- StateT
+                 .liftF(GitRepo.openExists(repoDir).use(gitOp(_)))
+                 .liftE[RepositoryErr]
+        yield ()
+
+        r.value
+
     override def create(
         name: SecretName,
-        meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] =
-      action => {
+        meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] = {
 
-        val commitMsg = s"Add secret [$name]"
-        val locs      = SecretPathEntries.from(repoDir, name)
+      val locs      = SecretPathEntries.from(repoDir, name)
+      val fileNames = NEL.of(locs.payload, locs.meta)
 
-        val fileNames = NEL.of(locs.payload, locs.meta)
-
-        val r = for {
-          st <- action.toEitherT
-          _  <- StateT
-                 .liftF(GitRepo.openExists(repoDir).use(_.commitFiles(fileNames, commitMsg)))
-                 .liftE[RepositoryErr]
-        } yield ()
-
-        r.value
-      }
+      withGitCommit(_.commitFiles(fileNames, s"Add secret [$name]"))
+    }
 
     override def update(name: SecretName, meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] =
-      action => {
+      val locs      = SecretPathEntries.from(repoDir, name)
+      val fileNames = NEL.of(locs.payload, locs.meta)
 
-        val commitMsg = s"Update secret [$name]"
-        val locs      = SecretPathEntries.from(repoDir, name)
-
-        val fileNames = NEL.of(locs.payload, locs.meta)
-
-        val r = for {
-          st <- action.toEitherT
-          _  <- StateT
-                 .liftF(GitRepo.openExists(repoDir).use(_.commitFiles(fileNames, commitMsg)))
-                 .liftE[RepositoryErr]
-        } yield ()
-
-        r.value
-      }
+      withGitCommit(_.commitFiles(fileNames, s"Update secret [$name]"))
 
     override def remove(name: SecretName): Mid[StateF[F, *], Result[Unit]] =
-      action => {
+      val locs      = SecretPathEntries.from(repoDir, name)
+      val fileNames = NEL.of(locs.payload, locs.meta)
 
-        val commitMsg = s"Remove secret [$name]"
-        val locs      = SecretPathEntries.from(repoDir, name)
-
-        val fileNames = NEL.of(locs.payload, locs.meta)
-
-        val r = for {
-          st <- action.toEitherT
-          _  <- StateT
-                 .liftF(GitRepo.openExists(repoDir).use(_.removeFiles(fileNames, commitMsg)))
-                 .liftE[RepositoryErr]
-        } yield ()
-
-        r.value
-      }
+      withGitCommit(_.removeFiles(fileNames, s"Remove secret [$name]"))
 
   }

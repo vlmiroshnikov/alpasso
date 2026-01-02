@@ -34,9 +34,7 @@ object CypherService:
         Process("gpg", Seq("--encrypt", "--quiet", "--recipient", fg, "--armor")) #< bis #> bos
 
       val result =
-        for
-          rcode <- blocking(encrypt.!(silentLogger))
-          _     <- blocking(println(s" ${encrypt.toString}  errorcode = ${rcode}"))
+        for rcode <- blocking(encrypt.!(silentLogger))
         yield Either.cond(rcode == 0, bos.toByteArray, CypherErr.InvalidCypher)
 
       EitherT(result).value

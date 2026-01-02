@@ -139,7 +139,10 @@ object Command:
           _ <- mutator.update(name, rmd).runA(State.Plain(RawSecretData.fromBytes(rsd))).liftE[Err]
 
           upd <- lookup(name) >>= load
-        yield SecretView(name, new String(upd.payload._1.byteArray).some, Some(upd.payload._2.into()))
+        yield SecretView(name,
+                         new String(upd.payload._1.byteArray).some,
+                         Some(upd.payload._2.into())
+        )
 
       result.value
 end Command

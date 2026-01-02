@@ -77,16 +77,9 @@ object GitRepo:
       Either.cond(status.isClean, (), GitError.RepositoryIsDirty)
 
   class Impl[F[_]: Sync as F](repository: Repository) extends GitRepo[F]:
-    import scala.sys.process.*
-
     import F.blocking
 
     given Order[Path] = Order.fromComparable[Path]
-
-    private def silentLogger(name: String) =
-      ProcessLogger(fout => println(s"${name} FOUT: ${fout}"),
-                    ferr => println(s"${name} FERRL ${ferr}")
-      )
 
     override def verify: F[Either[GitError, Unit]] =
       verify_(repository)
@@ -102,21 +95,12 @@ object GitRepo:
         ().asRight
 
     override def pullRemote(): F[Result[Unit]] =
-      val pull   = Process(Seq("git", "pull", "origin", "master"), repository.getWorkTree)
-      val result =
-        for rcode <- blocking(pull.!(silentLogger("pull")))
-        yield Either.cond(rcode == 0, (), GitError.SyncErr)
-
-      EitherT(result).value
+      blocking:
+        Try(new Git(repository).pull().call()).toEither.leftMap(_ => GitError.SyncErr).map(_ => ())
 
     override def pushToRemote(): F[Result[Unit]] =
-      val push = Process(Seq("git", "push", "origin", "master"), repository.getWorkTree)
-
-      val result =
-        for rcode <- blocking(push.!(silentLogger("push")))
-        yield Either.cond(rcode == 0, (), GitError.SyncErr)
-
-      EitherT(result).value
+      blocking:
+        Try(new Git(repository).push().call()).toEither.leftMap(_ => GitError.SyncErr).map(_ => ())
 
     override def history(): F[Result[HistoryLog]] =
       blocking:

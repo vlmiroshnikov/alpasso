@@ -100,24 +100,3 @@ object ArgParser:
 
   val command: Command[Action] =
     Command("alpasso", "header", true)(repos orElse add orElse remove orElse list orElse patch)
-
-@main
-def parse(): Unit = {
-  val init = ArgParser
-    .command
-    .parse(Seq("repo",
-               "init",
-               "-p",
-               ".",
-               "--gpg-fingerprint",
-               "5573E42BAA9D46C0F8D8C466CA6BEF44194FF928"
-           ),
-           sys.env
-    )
-
-  println(init)
-  val add = ArgParser.command.parse(Seq("new", ""))
-
-  val ls = ArgParser.command.parse(Seq("ls", "--grep", "proton"))
-  println(ls)
-}

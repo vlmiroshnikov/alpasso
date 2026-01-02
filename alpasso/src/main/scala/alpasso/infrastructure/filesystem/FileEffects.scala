@@ -32,6 +32,5 @@ object FileEffects:
       options: List[OpenOption]): F[Path] =
     Sync[F].blocking(Files.writeString(path, content, options*))
 
-  @deprecated
   def checkSecretExists[F[_]: Sync](p: SecretPathEntries): F[Boolean] =
     (pathExists[F](p.root), pathExists[F](p.payload)).mapN(_ && _)

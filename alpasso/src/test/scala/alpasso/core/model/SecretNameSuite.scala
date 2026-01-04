@@ -1,10 +1,9 @@
 package alpasso.core.model
 
+import alpasso.domain.SecretName
 import java.nio.file.Path
 
 import cats.syntax.show.*
-
-import alpasso.core.model.SecretName
 
 import munit.FunSuite
 
@@ -19,6 +18,22 @@ class SecretNameSuite extends FunSuite:
   test("shortName should return last path segment as string"):
     val secret = SecretName.of("path/to/secret").toOption.get
     assertEquals(secret.shortName, "secret")
+
+  test("shortName should return filename from absolute path"):
+    val secret = SecretName.of("/absolute/path/to/secret.txt").toOption.get
+    assertEquals(secret.shortName, "secret.txt")
+
+  test("shortName should handle simple filename without path"):
+    val secret = SecretName.of("simpleName").toOption.get
+    assertEquals(secret.shortName, "simpleName")
+
+  test("shortName should return empty string for root path"):
+    val secret = SecretName.of("/").toOption.get
+    assertEquals(secret.shortName, "")
+
+  test("shortName should handle path with trailing slash"):
+    val secret = SecretName.of("path/to/dir/").toOption.get
+    assertEquals(secret.shortName, "dir")
 
   test("trims trailing slashes"):
     val secret = SecretName.of("path/to/secret/").toOption.get

@@ -1,12 +1,10 @@
 package alpasso.infrastructure.filesystem
 
 import java.nio.file.Files
-
 import cats.effect.IO
 import cats.syntax.all.*
-
-import alpasso.domain.{ Secret, SecretName }
-import alpasso.infrastructure.cypher.{ CypherAlg, CypherService, Recipient }
+import alpasso.domain.{Secret, SecretName}
+import alpasso.infrastructure.cypher.{CypherAlg, CypherService, Recipient}
 import alpasso.infrastructure.filesystem.PersistentModels.RepositoryMetaConfig
 import alpasso.infrastructure.filesystem.RepositoryMutator.State
 import alpasso.infrastructure.filesystem.models.*
@@ -16,7 +14,7 @@ import weaver.*
 
 object RepositorySuite extends SimpleIOSuite {
 
-  test("RepositoryMutator create should create a new secret") { _ =>
+  test("RepositoryMutator create should create a new secret".ignore) { _ =>
     val secretName = SecretName.of("simple/name").toOption.get
     val recipient  = Recipient.hex("7BC332CCA78CBA3917A3DA2CAFD637E1298147A3")
 

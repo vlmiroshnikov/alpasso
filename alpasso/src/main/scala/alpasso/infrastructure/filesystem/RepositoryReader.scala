@@ -23,7 +23,6 @@ import alpasso.shared.models.*
 import alpasso.shared.syntax.*
 
 import glass.Upcast
-import io.circe.*
 
 enum RepositoryErr:
   case AlreadyExists(name: SecretName)

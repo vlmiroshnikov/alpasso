@@ -204,7 +204,7 @@ object RepositoryMutator:
 
   class Gitted[F[_]: Sync](repoDir: RepoRootDir) extends RepositoryMutator[Mid[StateF[F, *], *]] {
 
-    private def withGitCommit(
+    private def withGit(
         gitOp: GitRepo[F] => F[Either[GitError, RevCommit]]): Mid[StateF[F, *], Result[Unit]] =
       action =>
         val r = for
@@ -223,19 +223,19 @@ object RepositoryMutator:
       val locs      = SecretPathEntries.from(repoDir, name)
       val fileNames = NEL.of(locs.payload, locs.meta)
 
-      withGitCommit(_.commitFiles(fileNames, s"Add secret [$name]"))
+      withGit(_.commitFiles(fileNames, s"Add secret [$name]"))
     }
 
     override def update(name: SecretName, meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] =
       val locs      = SecretPathEntries.from(repoDir, name)
       val fileNames = NEL.of(locs.payload, locs.meta)
 
-      withGitCommit(_.commitFiles(fileNames, s"Update secret [$name]"))
+      withGit(_.commitFiles(fileNames, s"Update secret [$name]"))
 
     override def remove(name: SecretName): Mid[StateF[F, *], Result[Unit]] =
       val locs      = SecretPathEntries.from(repoDir, name)
       val fileNames = NEL.of(locs.payload, locs.meta)
 
-      withGitCommit(_.removeFiles(fileNames, s"Remove secret [$name]"))
+      withGit(_.removeFiles(fileNames, s"Remove secret [$name]"))
 
   }

@@ -1,11 +1,11 @@
 package alpasso.infrastructure.cypher
 
-import java.io.{ ByteArrayInputStream, ByteArrayOutputStream }
+import java.io.*
 
 import scala.sys.process.*
 
 import cats.*
-import cats.data.EitherT
+import cats.data.*
 import cats.effect.*
 import cats.syntax.all.*
 
@@ -14,9 +14,11 @@ enum CypherErr:
 
 type Result[A] = Either[CypherErr, A]
 
+type Bytes = Array[Byte]
+
 trait CypherService[F[_]]:
-  def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]]
-  def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]]
+  def encrypt(raw: Bytes): F[Result[Bytes]]
+  def decrypt(raw: Bytes): F[Result[Bytes]]
 
 object CypherService:
 
@@ -27,7 +29,7 @@ object CypherService:
     private val silentLogger =
       ProcessLogger(fout => println(s"FOUT: ${fout}"), ferr => println(s"FERRL ${ferr}"))
 
-    override def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]] =
+    override def encrypt(raw: Bytes): F[Result[Bytes]] =
       val bis     = ByteArrayInputStream(raw)
       val bos     = ByteArrayOutputStream()
       val encrypt =
@@ -39,7 +41,7 @@ object CypherService:
 
       EitherT(result).value
 
-    override def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]] =
+    override def decrypt(raw: Bytes): F[Result[Bytes]] =
       val bis     = ByteArrayInputStream(raw)
       val bos     = ByteArrayOutputStream()
       val decrypt =
@@ -52,8 +54,8 @@ object CypherService:
       EitherT(result).value
 
   def empty[F[_]: Applicative]: CypherService[F] = new CypherService[F]:
-    override def encrypt(raw: Array[Byte]): F[Result[Array[Byte]]] = raw.asRight.pure
-    override def decrypt(raw: Array[Byte]): F[Result[Array[Byte]]] = raw.asRight.pure
+    override def encrypt(raw: Bytes): F[Result[Bytes]] = raw.asRight.pure
+    override def decrypt(raw: Bytes): F[Result[Bytes]] = raw.asRight.pure
 
   def gpg[F[_]: Sync](fg: Recipient): CypherService[F] = GpgImpl[F](fg)
 

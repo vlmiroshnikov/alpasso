@@ -26,7 +26,7 @@ object AlpassoApp extends IOApp:
     val rmr  = RepositoryConfigReader.make[IO]
 
     given [A: Show]: Show[Option[A]] =
-      Show.show[Option[A]](_.fold("empty")(_.show))
+      Show.show[Option[A]](_.fold("[ empty ]")(_.show))
 
     given SensitiveMode = SensitiveMode.Masked
 
@@ -72,6 +72,7 @@ object AlpassoApp extends IOApp:
 
           case RepoOp.RemoteOps(RemoteOp.Setup(name, url)) =>
             provideConfig(setupRemote(name, url)) >>= handle
+
           case RepoOp.RemoteOps(RemoteOp.Sync) =>
             provideConfig(syncRemote) >>= handle
 

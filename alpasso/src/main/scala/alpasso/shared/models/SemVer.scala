@@ -20,7 +20,7 @@ object SemVer:
   def fromString(version: String): Either[String, SemVer] =
     version match
       case parts(ma, mi, p) => SemVer(ma.toInt, mi.toInt, p.toInt).asRight
-      case _                => "mismatch semver format".asLeft
+      case _                => s"Invalid semver format: ${version}".asLeft
 
   given Decoder[SemVer] = Decoder.decodeString.emap(fromString)
 

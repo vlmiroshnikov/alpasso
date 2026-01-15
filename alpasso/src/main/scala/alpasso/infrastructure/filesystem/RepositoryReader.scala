@@ -31,7 +31,7 @@ enum RepositoryErr:
   case Inconsistent(name: String)
   case CypherError
   case IOError(cause: Option[String])
-  case Undefiled
+  case Undefined
 
 object RepositoryErr:
   given Upcast[RepositoryErr, GitError]  = fromGitError
@@ -43,8 +43,8 @@ object RepositoryErr:
         RepositoryErr.Inconsistent("Git repository not initialized")
       case GitError.RepositoryIsDirty =>
         RepositoryErr.Inconsistent("Git repository has uncommited files")
-      case GitError.UnexpectedError => RepositoryErr.Undefiled
-      case GitError.SyncErr         => RepositoryErr.Undefiled
+      case GitError.UnexpectedError => RepositoryErr.Undefined
+      case GitError.SyncErr         => RepositoryErr.Undefined
 
 type Result[+T]    = Either[RepositoryErr, T]
 type PackResult[T] = Result[Secret[T]]

@@ -114,7 +114,7 @@ object RepositoryMutator:
               StateT.liftF(
                 update.attempt.map(_.leftMap(e => RepositoryErr.IOError(e.getMessage.some)))
               )
-            case _ => StateT.pure(RepositoryErr.Undefiled.asLeft)
+            case _ => StateT.pure(RepositoryErr.Undefined.asLeft)
           }
       }
   }
@@ -127,7 +127,7 @@ object RepositoryMutator:
         rsd <- EitherT.fromEither {
                  state match
                    case Plain(data) => data.asRight
-                   case _           => RepositoryErr.Undefiled.asLeft
+                   case _           => RepositoryErr.Undefined.asLeft
                }
         raw <- cs.encrypt(rsd.byteArray).liftE[RepositoryErr]
       yield RawSecretData.fromBytes(raw)
@@ -239,3 +239,4 @@ object RepositoryMutator:
       withGit(_.removeFiles(fileNames, s"Remove secret [$name]"))
 
   }
+

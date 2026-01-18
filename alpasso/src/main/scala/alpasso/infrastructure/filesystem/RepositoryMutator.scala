@@ -239,4 +239,3 @@ object RepositoryMutator:
       withGit(_.removeFiles(fileNames, s"Remove secret [$name]"))
 
   }
-

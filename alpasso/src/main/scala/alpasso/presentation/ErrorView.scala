@@ -18,7 +18,9 @@ object ErrorView:
 
 given Converter[Err, ErrorView] =
   case Err.RepositoryProvisionErr(ProvisionErr.AlreadyExists(path)) =>
-    ErrorView(s"${RED}Repository at ${RESET}${BLUE}[${path.toString}]${RESET} ${RED} already exists${RESET}")
+    ErrorView(
+      s"${RED}Repository at ${RESET}${BLUE}[${path.toString}]${RESET} ${RED} already exists${RESET}"
+    )
 
   case Err.SecretRepoErr(inner) =>
     inner match

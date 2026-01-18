@@ -103,7 +103,7 @@ object RepositoryMutator:
       val p = SecretPathEntries.from(repoDir, name)
 
       StateT.liftF(checkSecretExists(p)).flatMap { rootExists =>
-        if rootExists then StateT.pure(RepositoryErr.Corrupted(name).asLeft)
+        if !rootExists then StateT.pure(RepositoryErr.NotFound(name).asLeft)
         else
           StateT.get[F, State].flatMap {
             case State.Encrypted(data) =>

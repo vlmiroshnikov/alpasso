@@ -59,25 +59,3 @@ object CypherService:
 
   def gpg[F[_]: Sync](fg: Recipient): CypherService[F] = GpgImpl[F](fg)
 
-@main
-def main(): Unit = {
-
-  val fg: Recipient = Recipient.hex("1287075CBDF42BC4379E4EC61839D663CCE50A32")
-
-  val bis = ByteArrayInputStream("hello 123123123#$!!#!@@!#".getBytes)
-  val bos = ByteArrayOutputStream()
-  // gpg --encrypt --no-compress  --recipient
-  val encrypt = Process("gpg", Seq("--encrypt", "--recipient", fg, "--armor")) #< bis #> bos
-  encrypt.!
-
-  val res = bos.toByteArray
-  println(new String(res))
-
-  val bis1 = ByteArrayInputStream(bos.toByteArray)
-  val bos1 = ByteArrayOutputStream()
-
-  val decrypt = Process("gpg", Seq("--decrypt", "--recipient", fg, "--armor")) #< bis1 #> bos1
-  decrypt.!
-
-  println(new String(bos1.toByteArray))
-}

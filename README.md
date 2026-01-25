@@ -19,7 +19,7 @@ A secure secret management tool built with Scala 3 and compiled to a native imag
 - **Functional Programming**: cats, cats-effect, tofu
 - **CLI Parsing**: decline
 - **Serialization**: circe
-- **Encryption**: OpenGPG via Bouncy Castle
+- **Encryption**: OpenGPG 
 - **Version Control**: JGit
 - **Native Compilation**: GraalVM native-image
 - **Testing**: munit, weaver-cats

@@ -103,7 +103,7 @@ object RepositoryMutator:
       val p = SecretPathEntries.from(repoDir, name)
 
       StateT.liftF(checkSecretExists(p)).flatMap { rootExists =>
-        if rootExists then StateT.pure(RepositoryErr.Corrupted(name).asLeft)
+        if !rootExists then StateT.pure(RepositoryErr.NotFound(name).asLeft)
         else
           StateT.get[F, State].flatMap {
             case State.Encrypted(data) =>
@@ -114,7 +114,7 @@ object RepositoryMutator:
               StateT.liftF(
                 update.attempt.map(_.leftMap(e => RepositoryErr.IOError(e.getMessage.some)))
               )
-            case _ => StateT.pure(RepositoryErr.Undefiled.asLeft)
+            case _ => StateT.pure(RepositoryErr.Undefined.asLeft)
           }
       }
   }
@@ -127,7 +127,7 @@ object RepositoryMutator:
         rsd <- EitherT.fromEither {
                  state match
                    case Plain(data) => data.asRight
-                   case _           => RepositoryErr.Undefiled.asLeft
+                   case _           => RepositoryErr.Undefined.asLeft
                }
         raw <- cs.encrypt(rsd.byteArray).liftE[RepositoryErr]
       yield RawSecretData.fromBytes(raw)
@@ -204,7 +204,7 @@ object RepositoryMutator:
 
   class Gitted[F[_]: Sync](repoDir: RepoRootDir) extends RepositoryMutator[Mid[StateF[F, *], *]] {
 
-    private def withGitCommit(
+    private def withGit(
         gitOp: GitRepo[F] => F[Either[GitError, RevCommit]]): Mid[StateF[F, *], Result[Unit]] =
       action =>
         val r = for
@@ -223,19 +223,19 @@ object RepositoryMutator:
       val locs      = SecretPathEntries.from(repoDir, name)
       val fileNames = NEL.of(locs.payload, locs.meta)
 
-      withGitCommit(_.commitFiles(fileNames, s"Add secret [$name]"))
+      withGit(_.commitFiles(fileNames, s"Add secret [$name]"))
     }
 
     override def update(name: SecretName, meta: RawMetadata): Mid[StateF[F, *], Result[Unit]] =
       val locs      = SecretPathEntries.from(repoDir, name)
       val fileNames = NEL.of(locs.payload, locs.meta)
 
-      withGitCommit(_.commitFiles(fileNames, s"Update secret [$name]"))
+      withGit(_.commitFiles(fileNames, s"Update secret [$name]"))
 
     override def remove(name: SecretName): Mid[StateF[F, *], Result[Unit]] =
       val locs      = SecretPathEntries.from(repoDir, name)
       val fileNames = NEL.of(locs.payload, locs.meta)
 
-      withGitCommit(_.removeFiles(fileNames, s"Remove secret [$name]"))
+      withGit(_.removeFiles(fileNames, s"Remove secret [$name]"))
 
   }

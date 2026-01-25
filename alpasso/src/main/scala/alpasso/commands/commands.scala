@@ -45,8 +45,9 @@ object Command:
     val cs = config.cypherAlg match
       case CypherAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
 
-    val reader                                   = RepositoryReader.make(config, cs)
-    val mutator: RepositoryMutator[StateF[F, *]] = RepositoryMutator.make(config, cs)
+    val reader  = RepositoryReader.make(config, cs)
+    val mutator = RepositoryMutator.make(config, cs)
+
     Impl[F](cs, reader, mutator)
 
   private class Impl[F[_]: {Sync, Console}](

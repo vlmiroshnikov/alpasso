@@ -13,7 +13,7 @@ import cats.tagless.*
 import tofu.higherKind.*
 import tofu.higherKind.Mid.*
 
-import alpasso.infrastructure.cypher.{ CypherAlg, CypherService }
+import alpasso.infrastructure.cypher.{ CypherAlg, CypherService, KeyInput }
 import alpasso.infrastructure.filesystem.FileEffects.{ createDirectories, pathExists, writeString }
 import alpasso.infrastructure.filesystem.PersistentModels.RepositoryMetaConfig
 import alpasso.infrastructure.git.GitRepo
@@ -50,17 +50,27 @@ object SessionProvisioner:
 
     (cs |+| gitted |+| logged) attach alg
 
-  class CypherProvisioner[F[_]: {Sync}] extends Provisioner[Mid[F, *]] {
+  class CypherProvisioner[F[_]: {Sync, Console}] extends Provisioner[Mid[F, *]] {
 
     override def provision(
         config: RepositoryMetaConfig): Mid[F, Either[ProvisionErr, Unit]] = { action =>
-      val cs = config.cryptoAlg match
-        case CypherAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
-
-      (for
-        _ <- EitherT.liftF(cs.encrypt(Array[Byte](1)))
-        r <- EitherT(action)
-      yield r).value
+      config.cryptoAlg match
+        case CypherAlg.Gpg(fingerprint) =>
+          val cs = CypherService.gpg(fingerprint)
+          (for
+            _ <- EitherT.liftF(cs.encrypt(Array[Byte](1)))
+            r <- EitherT(action)
+          yield r).value
+        case CypherAlg.MasterKey =>
+          // For MasterKey, just validate that key can be read
+          // Actual service will be created later when needed
+          (for
+            keyResult <- EitherT.liftF(KeyInput.readMasterKey[F])
+            _ <- EitherT.fromEither[F](
+                   keyResult.left.map(_ => ProvisionErr.Undefined)
+                 )
+            r <- EitherT(action)
+          yield r).value
     }
   }
 

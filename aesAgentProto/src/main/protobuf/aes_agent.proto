@@ -1,0 +1,114 @@
+syntax = "proto3";
+
+package aesagent;
+
+option java_package = "aesagent.proto";
+option java_outer_classname = "AesAgentProto";
+
+// Сервис для работы с AES шифрованием
+service AesAgentService {
+  // Инициализация сессии с master key
+  rpc Initialize(InitializeRequest) returns (InitializeResponse);
+  
+  // Шифрование данных
+  rpc Encrypt(EncryptRequest) returns (EncryptResponse);
+  
+  // Дешифрование данных
+  rpc Decrypt(DecryptRequest) returns (DecryptResponse);
+  
+  // Проверка состояния сессии
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// Запрос на инициализацию сессии
+message InitializeRequest {
+  // Master key в формате bytes (32 байта для AES-256)
+  bytes master_key = 1;
+  
+  // Таймаут сессии в секундах (по умолчанию 900 = 15 минут)
+  uint32 session_timeout_seconds = 2;
+}
+
+// Ответ на инициализацию
+message InitializeResponse {
+  // Статус инициализации
+  Status status = 1;
+  
+  // Сообщение об ошибке (если status != SUCCESS)
+  string error_message = 2;
+  
+  // Идентификатор сессии (для отслеживания)
+  string session_id = 3;
+}
+
+// Запрос на шифрование
+message EncryptRequest {
+  // Данные для шифрования (plaintext)
+  bytes data = 1;
+}
+
+// Ответ на шифрование
+message EncryptResponse {
+  // Статус операции
+  Status status = 1;
+  
+  // Зашифрованные данные (ciphertext)
+  bytes encrypted_data = 2;
+  
+  // Сообщение об ошибке (если status != SUCCESS)
+  string error_message = 3;
+}
+
+// Запрос на дешифрование
+message DecryptRequest {
+  // Зашифрованные данные (ciphertext)
+  bytes encrypted_data = 1;
+}
+
+// Ответ на дешифрование
+message DecryptResponse {
+  // Статус операции
+  Status status = 1;
+  
+  // Расшифрованные данные (plaintext)
+  bytes data = 2;
+  
+  // Сообщение об ошибке (если status != SUCCESS)
+  string error_message = 3;
+}
+
+// Запрос на проверку состояния
+message HealthCheckRequest {
+  // Пустое сообщение
+}
+
+// Ответ на проверку состояния
+message HealthCheckResponse {
+  // Статус сессии
+  SessionStatus session_status = 1;
+  
+  // Оставшееся время сессии в секундах (если сессия активна)
+  uint32 remaining_seconds = 2;
+  
+  // Сообщение об ошибке (если session_status != ACTIVE)
+  string error_message = 3;
+}
+
+// Статус операции
+enum Status {
+  SUCCESS = 0;              // Операция успешна
+  ERROR = 1;                 // Общая ошибка
+  SESSION_NOT_INITIALIZED = 2;  // Сессия не инициализирована
+  SESSION_EXPIRED = 3;      // Сессия истекла
+  INVALID_KEY = 4;          // Неверный ключ
+  INVALID_DATA = 5;         // Неверные данные для шифрования/дешифрования
+  ENCRYPTION_ERROR = 6;     // Ошибка при шифровании
+  DECRYPTION_ERROR = 7;     // Ошибка при дешифровании
+}
+
+// Статус сессии
+enum SessionStatus {
+  ACTIVE = 0;               // Сессия активна
+  NOT_INITIALIZED = 1;      // Сессия не инициализирована
+  EXPIRED = 2;              // Сессия истекла
+}

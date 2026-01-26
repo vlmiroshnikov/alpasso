@@ -46,7 +46,9 @@ object AlpassoApp extends IOApp:
       yield result).value
 
     def provideCommand[A](f: Command[IO] => IO[Result[A]]): IO[Result[A]] =
-      provideConfig(config => f(Command.make[IO](config)))
+      provideConfig(config =>
+        Command.make[IO](config).use(cmd => f(cmd))
+      )
 
     ArgParser.command.parse(args) match
       case Left(help) =>

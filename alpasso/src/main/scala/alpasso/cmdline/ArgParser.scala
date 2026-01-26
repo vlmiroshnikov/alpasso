@@ -18,10 +18,18 @@ object ArgParser:
   val repos: Opts[Action] = Opts.subcommand("repo", "Repository operations") {
 
     val init = Opts.subcommand("init", "Init new repository") {
-      val path = Opts.option[Path]("path", "Repository path", "p")
-      val gpg  = Opts.option[Recipient]("gpg-fingerprint", "GPG fingerprint").map(CypherAlg.Gpg(_))
+      val path      = Opts.option[Path]("path", "Repository path", "p")
+      val gpg       = Opts.option[Recipient]("gpg-fingerprint", "GPG fingerprint").map(CypherAlg.Gpg(_)).orNone
+      val masterKey = Opts.flag("master-key", "Use master key encryption").map(_ => CypherAlg.MasterKey).orNone
 
-      (path, gpg).mapN(RepoOp.Init.apply)
+      (path, gpg, masterKey).mapN { (p, g, m) =>
+        val cypher = (g, m) match
+          case (Some(gpgAlg), None)    => gpgAlg
+          case (None, Some(masterKey)) => masterKey
+          case (Some(_), Some(_))      => CypherAlg.MasterKey // If both specified, prefer master-key
+          case (None, None)            => CypherAlg.Gpg(Recipient.hex("")) // Default to GPG (will fail validation)
+        RepoOp.Init(p, cypher)
+      }
     }
 
     val list = Opts.subcommand("list", "List repository") {

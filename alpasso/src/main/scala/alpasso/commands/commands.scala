@@ -41,14 +41,24 @@ trait Command[F[_]]:
 
 object Command:
 
-  def make[F[_]: {Sync, Console}](config: RepositoryConfiguration): Command[F] =
-    val cs = config.cypherAlg match
-      case CypherAlg.Gpg(fingerprint) => CypherService.gpg(fingerprint)
-
-    val reader  = RepositoryReader.make(config, cs)
-    val mutator = RepositoryMutator.make(config, cs)
-
-    Impl[F](cs, reader, mutator)
+  def make[F[_]: Async: Console](config: RepositoryConfiguration): Resource[F, Command[F]] =
+    config.cypherAlg match
+      case CypherAlg.Gpg(fingerprint) =>
+        val cs     = CypherService.gpg(fingerprint)
+        val reader = RepositoryReader.make(config, cs)
+        val mutator = RepositoryMutator.make(config, cs)
+        Resource.pure(Impl[F](cs, reader, mutator))
+      case CypherAlg.MasterKey =>
+        for
+          key      <- Resource.eval(KeyInput.readMasterKey[F].flatMap {
+                       case Right(k) => k.pure[F]
+                       case Left(e)  => Sync[F].raiseError(new RuntimeException(s"Failed to read key: $e"))
+                     })
+          manager = AesAgentManager.make[F]
+          cs      <- CypherService.masterKey(key, manager)
+          reader  = RepositoryReader.make(config, cs)
+          mutator = RepositoryMutator.make(config, cs)
+        yield Impl[F](cs, reader, mutator)
 
   private class Impl[F[_]: {Sync, Console}](
       cs: CypherService[F],

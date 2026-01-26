@@ -5,3 +5,4 @@ addSbtPlugin("org.scalameta"  % "sbt-scalafmt"       % "2.5.2")
 // project/plugins.sbt
 addSbtPlugin("org.scalameta" % "sbt-native-image" % "0.3.4")
 addSbtPlugin("com.eed3si9n"  % "sbt-buildinfo"    % "0.13.1")
+addSbtPlugin("org.typelevel" % "sbt-fs2-grpc" % "2.7.4")

@@ -2,7 +2,7 @@ import sbt.*
 import sbt.Keys.*
 
 object V {
-  val scala       = "3.7.4"
+  val scala       = "3.8.2"
   val cats        = "2.13.0"
   val catsEffect  = "3.6.3"
   val tagless     = "0.16.4"

@@ -12,10 +12,12 @@
 
 ### Language & Frameworks
 - **Language**: Scala 3 with functional programming paradigm
-- **Core libraries**: cats, cats-effect, tofu (glass-core, tofu-core-higher-kind)
+- **Core libraries**: cats, cats-effect, cats-tagless-core, tofu (glass-core, tofu-core-higher-kind)
 - **CLI parsing**: decline
-- **Serialization**: circe
-- **Testing**: munit, weaver-cats
+- **Serialization**: circe (core, parser, derivation with `derives ConfiguredCodec`)
+- **Git**: JGit
+- **Logging**: SLF4J NOP
+- **Testing**: munit (unit tests), weaver-cats (IO/integration tests)
 - **Native compilation**: GraalVM native image
 
 ### Imports
@@ -46,6 +48,12 @@
     def of(name: String): ValidatedNel[String, SecretName] = ...
   ```
 - Use **strong typing** throughout - avoid String for domain concepts
+- Use **Converter[-From, +To]** trait for type conversions:
+  ```scala
+  trait Converter[-From, +To] extends (From => To):
+    extension (x: From) def into(): To = this(x)
+  ```
+  Define `given Converter[...]` in companion objects or presentation layer.
 
 ### Error Handling
 - Use `Result[T] = Either[Err, T]` for operations that can fail
@@ -89,11 +97,12 @@
 - Use extension methods on opaque types in companion objects
 
 ### Testing
-- Use **munit.FunSuite** for test suites
-- Test file naming: `*Suite.scala` (e.g., `SecretNameSuite.scala`)
+- **Unit tests**: Use **munit.FunSuite** — test file naming: `*Suite.scala` (e.g., `SecretNameSuite.scala`)
+- **IO/Integration tests**: Use **weaver-cats SimpleIOSuite** — e.g., `RepositorySuite.scala`
 - Write descriptive test names: `test("SecretName.of should validate empty names")`
-- Use `assert()`, `assertEquals()`, `assertClauses()` for assertions
+- Use `assert()`, `assertEquals()` for assertions; `expect(...)` for weaver
 - Test validation results: `assert(SecretName.of("").isInvalid)`
+- Test both success and error paths; do not leave tests marked `.ignore`
 
 ### Command Pattern
 - Define traits for command algebras:

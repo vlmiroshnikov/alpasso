@@ -2,16 +2,16 @@ import sbt.*
 import sbt.Keys.*
 
 object V {
-  val scala       = "3.8.2"
+  val scala       = "3.8.3"
   val cats        = "2.13.0"
   val catsEffect  = "3.6.3"
   val tagless     = "0.16.5"
   val circe       = "0.14.13"
   val glass       = "0.3.0"
-  val tofu        = "0.14.1"
+  val tofu        = "0.14.2"
   val decline     = "2.6.2"
-  val munit       = "1.2.4"
-  val weaver      = "0.12.0"
+  val munit       = "1.3.3"
+  val weaver      = "0.13.0"
   val nativeImage = "22.3.1"
   val jgit        = "6.5.0.202303070854-r"
   val graalvm     = "graalvm-java19"
@@ -43,7 +43,7 @@ object Deps {
 
   lazy val circe   = Seq("io.circe" %% "circe-core", "io.circe" %% "circe-parser").map(_ % V.circe)
   lazy val decline = Seq("com.monovore" %% "decline" % V.decline)
-  lazy val logger  = Seq("org.slf4j" % "slf4j-nop" % "2.0.17")
+  lazy val logger  = Seq("org.slf4j" % "slf4j-nop" % "2.0.18")
   lazy val munit   = Seq("org.scalameta" %% "munit" % V.munit % Test)
   lazy val weaver  = Seq("org.typelevel" %% "weaver-cats" % V.weaver % Test)
 }

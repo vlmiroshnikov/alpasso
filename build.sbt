@@ -23,7 +23,7 @@ lazy val alpasso = project
     )
   )
   .settings(
-    buildInfoKeys := Seq[BuildInfoKey](name, ThisBuild / version, scalaVersion),
+    buildInfoKeys := Seq[BuildInfoKey](name, version, scalaVersion),
     buildInfoPackage := "alpasso.shared.models"
   )
   .settings(Settings.common)
@@ -31,7 +31,6 @@ lazy val alpasso = project
     libraryDependencies ++= Deps.infra ++ Deps.jgit ++ Deps.circe ++ Deps.decline ++ Deps.logger ++ Deps.munit ++ Deps.weaver
   )
 
-lazy val root = project
-  .in(file("."))
+lazy val root = rootProject
   .settings(Settings.common)
   .aggregate(alpasso)

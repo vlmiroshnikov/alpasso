@@ -64,11 +64,13 @@ object GitRepo:
       .map(Impl(_))
 
   def createNew[F[_]: Sync](repoDir: Path): Resource[F, GitRepo[F]] = Resource
-    .fromAutoCloseable(Sync[F].blocking {
-      val repository = FileRepositoryBuilder.create(repoDir.resolve(".git").toFile)
-      repository.create()
-      repository
-    })
+    .fromAutoCloseable(
+      Sync[F].blocking {
+        val repository = FileRepositoryBuilder.create(repoDir.resolve(".git").toFile)
+        repository.create()
+        repository
+      }
+    )
     .map(Impl(_))
 
   private def verify_[F[_]: Sync as S](repository: Repository): F[Either[GitError, Unit]] =

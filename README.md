@@ -34,7 +34,7 @@ cd alpasso
 sbt alpasso/nativeImage
 ```
 
-The native binary will be available at `alpasso/target/native-image/alpasso`.
+The native binary will be available at `target/out/jvm/scala-3.8.4/alpasso/native-image/alpasso`.
 
 ## Quick Start
 

@@ -20,7 +20,6 @@ object V {
 object Settings {
 
   lazy val common = Seq(
-    version        := V.scala,
     scalacOptions ++= Seq("-deprecation",
                           "-new-syntax",
                           "-Xkind-projector",

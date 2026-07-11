@@ -23,7 +23,7 @@ object errors:
     case InternalErr
     case CommandSyntaxError(help: String)
     case UseSwitchCommand
-    case VersionMismatch(version: SemVer)
+    case VersionMismatch(message: String)
     case RepositoryProvisionErr(err: ProvisionErr)
 
   object Err:

@@ -23,7 +23,7 @@ lazy val alpasso = project
     )
   )
   .settings(
-    buildInfoKeys := Seq[BuildInfoKey](name, version, scalaVersion),
+    buildInfoKeys := Seq[BuildInfoKey](name, version, scalaVersion, sbtVersion),
     buildInfoPackage := "alpasso.shared.models"
   )
   .settings(Settings.common)

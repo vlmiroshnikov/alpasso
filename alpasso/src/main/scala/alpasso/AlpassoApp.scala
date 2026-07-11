@@ -41,7 +41,7 @@ object AlpassoApp extends IOApp:
         repoDir <- EitherT.fromOption(RepoRootDir.fromPath(session.path).toOption, Err.InternalErr)
         cfg     <- rmr.read(session.path).liftE[Err]
         current = SemVer.current.getOrElse(SemVer.zero)
-        _      <- EitherT.cond(cfg.version == current, (), Err.VersionMismatch(cfg.version))
+        _      <- EitherT.cond(cfg.version == current, (), Err.VersionMismatch(s" Config : ${cfg.version} Current: $current "))
         result <- f(RepositoryConfiguration(repoDir, cfg.version, cfg.cryptoAlg)).liftE[Err]
       yield result).value
 

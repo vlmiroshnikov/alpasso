@@ -30,7 +30,7 @@ object AlpassoApp extends IOApp:
 
     given SensitiveMode = SensitiveMode.Masked
 
-    def handle[T: Show](result: Result[T]): IO[ExitCode] =
+    def prettyPrint[T: Show](result: Result[T]): IO[ExitCode] =
       result match
         case Left(e)  => IO.println(e.into().show).as(ExitCode.Error)
         case Right(r) => IO.println(r.show).as(ExitCode.Success)
@@ -41,7 +41,10 @@ object AlpassoApp extends IOApp:
         repoDir <- EitherT.fromOption(RepoRootDir.fromPath(session.path).toOption, Err.InternalErr)
         cfg     <- rmr.read(session.path).liftE[Err]
         current = SemVer.current.getOrElse(SemVer.zero)
-        _      <- EitherT.cond(cfg.version == current, (), Err.VersionMismatch(s" Config : ${cfg.version} Current: $current "))
+        _ <- EitherT.cond(cfg.version == current,
+                          (),
+                          Err.VersionMismatch(s" Config : ${cfg.version} Current: $current ")
+             )
         result <- f(RepositoryConfiguration(repoDir, cfg.version, cfg.cryptoAlg)).liftE[Err]
       yield result).value
 
@@ -50,7 +53,7 @@ object AlpassoApp extends IOApp:
 
     ArgParser.command.parse(args) match
       case Left(help) =>
-        handle(Err.CommandSyntaxError(help.toString).asLeft[Unit])
+        prettyPrint(Err.CommandSyntaxError(help.toString).asLeft[Unit])
 
       case Right(Action.Repo(ops)) =>
         ops match
@@ -58,36 +61,36 @@ object AlpassoApp extends IOApp:
             val path = pathOpt.toAbsolutePath
             val boot = bootstrap[IO](path, SemVer.current.getOrElse(SemVer.zero), cypher)
               .flatTap(_.fold(_ => IO.unit, _ => smgr.setup(Session(path))))
-            boot >>= handle
+            boot >>= prettyPrint
 
-          case RepoOp.List        => smgr.listAll.map(_.into().asRight[Err]) >>= handle
-          case RepoOp.Log         => provideConfig(historyLog) >>= handle
+          case RepoOp.List        => smgr.listAll.map(_.into().asRight[Err]) >>= prettyPrint
+          case RepoOp.Log         => provideConfig(historyLog) >>= prettyPrint
           case RepoOp.Switch(sel) =>
             val switch = OptionT(smgr.listAll.map(_.zipWithIndex.find((_, idx) => idx == sel)))
               .cataF(
                 IO(Err.UseSwitchCommand.asLeft),
                 (s, _) => smgr.setup(s).as(s.into().asRight[Err])
               )
-            switch >>= handle
+            switch >>= prettyPrint
 
           case RepoOp.RemoteOps(RemoteOp.Setup(name, url)) =>
-            provideConfig(setupRemote(name, url)) >>= handle
+            provideConfig(setupRemote(name, url)) >>= prettyPrint
 
           case RepoOp.RemoteOps(RemoteOp.Sync) =>
-            provideConfig(syncRemote) >>= handle
+            provideConfig(syncRemote) >>= prettyPrint
 
       case Right(Action.New(sn, sp, sm)) =>
-        provideCommand(_.create(sn, sp.getOrElse(SecretPayload.empty), sm)) >>= handle
+        provideCommand(_.create(sn, sp.getOrElse(SecretPayload.empty), sm)) >>= prettyPrint
 
       case Right(Action.Remove(sn)) =>
-        provideCommand(_.remove(sn)) >>= handle
+        provideCommand(_.remove(sn)) >>= prettyPrint
 
       case Right(Action.Patch(sn, spOpt, smOpt)) =>
-        provideCommand(_.patch(sn, spOpt, smOpt)) >>= handle
+        provideCommand(_.patch(sn, spOpt, smOpt)) >>= prettyPrint
 
       case Right(Action.Filter(where, OutputFormat.Tree, smode)) =>
         given SensitiveMode = smode
-        provideCommand(_.filter(where)) >>= handle
+        provideCommand(_.filter(where)) >>= prettyPrint
 
       case Right(Action.Filter(where, OutputFormat.Table, smode)) =>
         given SensitiveMode = smode
@@ -103,4 +106,4 @@ object AlpassoApp extends IOApp:
           }
           .value
           .value
-        buildTableView >>= handle
+        buildTableView >>= prettyPrint
